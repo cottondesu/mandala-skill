@@ -1,0 +1,7 @@
+# Changelog
+
+## v0.1.0 (unreleased)
+
+- Add the canonical Skill source package for manual-copy installation with Codex and Claude Code.
+- Document Mandala CLI v0.3.0 as the tested baseline, use `mandala --version` for availability/version checks, and make CLI-owned state boundaries explicit.
+- Add a deterministic source-to-distribution build, package validation, tests, and behavioral eval fixtures.
