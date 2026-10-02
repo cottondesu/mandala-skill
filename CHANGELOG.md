@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.1.1 (unreleased)
+## v0.1.1 (2026-10-02)
 
 - Validate the canonical package against the Agent Skills name and description metadata constraints used by this repository.
 - Add bilingual activation-routing fixtures for explicit Mandala use and adjacent non-Mandala requests.
