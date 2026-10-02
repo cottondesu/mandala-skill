@@ -16,6 +16,17 @@ else:
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGES = (ROOT / "src" / "mandala", ROOT / "dist" / "mandala")
 EXPECTED = {Path("SKILL.md"), Path("references/cli-contract.md")}
+SKILL_NAME: Final = "mandala"
+# Agent Skills specification: name and description metadata constraints.
+NAME_MAX: Final = 64
+DESCRIPTION_MAX: Final = 1024
+SKILL_NAME_PATTERN: Final = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+ACTIVATION_FIELDS: Final = {"id", "category", "locale", "prompt", "should_activate"}
+ACTIVATION_LOCALES: Final = {"en", "ja"}
+REQUIRED_ACTIVATION_CATEGORIES: Final = {
+    "explicit-tracking", "existing-mandala-tracking", "generic-gap-analysis",
+    "generic-task-management", "unrelated-mandala",
+}
 LINK = re.compile(r"(?<!!)\[[^]]+\]\(([^)]+)\)")
 FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 LOCAL_PATH = re.compile(rb"(?:/(?:Users|home)/[^\s`'\"<>/]+/|[A-Za-z]:[\\/]+Users[\\/]+[^\s`'\"<>\\/]+[\\/])")
@@ -182,9 +193,59 @@ def frontmatter(skill: str) -> dict[str, str]:
         if key in values:
             raise ValueError(f"duplicate frontmatter key: {key}")
         values[key] = value.strip()
+    # Repository policy: the Agent Skills specification allows more optional fields.
     if set(values) != {"name", "description"}:
         raise ValueError("frontmatter needs only name and description")
     return values
+
+
+def validate_agent_skills_metadata(metadata: dict[str, str], directory_name: str) -> None:
+    """Check the Agent Skills specification constraints on name and description."""
+    name = metadata.get("name", "")
+    if not 1 <= len(name) <= NAME_MAX:
+        raise ValueError(f"Skill name must be 1-{NAME_MAX} characters: {name!r}")
+    if not SKILL_NAME_PATTERN.fullmatch(name):
+        raise ValueError(f"Skill name must use lowercase a-z, 0-9, and single inner hyphens: {name!r}")
+    if name != directory_name:
+        raise ValueError(f"Skill name must match its directory: {name!r} != {directory_name!r}")
+    description = metadata.get("description", "")
+    if not 1 <= len(description) <= DESCRIPTION_MAX or not description.strip():
+        raise ValueError(f"Skill description must be 1-{DESCRIPTION_MAX} non-empty characters")
+
+
+def validate_activation_metadata(cases: list[dict]) -> None:
+    """Check activation-routing fixture structure; this does not prove agent routing."""
+    if not isinstance(cases, list):
+        raise ValueError("activation fixture must be a list")
+    ids = set()
+    outcomes: set[tuple[bool, str]] = set()
+    categories = set()
+    for case in cases:
+        if not isinstance(case, dict) or set(case) != ACTIVATION_FIELDS:
+            raise ValueError("invalid activation case schema")
+        if not all(isinstance(case[field], str) and case[field].strip() for field in ("id", "category", "prompt")):
+            raise ValueError(f"invalid activation case schema: {case.get('id')!r}")
+        if case["locale"] not in ACTIVATION_LOCALES:
+            raise ValueError(f"invalid activation locale: {case['id']}")
+        if not isinstance(case["should_activate"], bool):
+            raise ValueError(f"activation should_activate must be boolean: {case['id']}")
+        if case["id"] in ids:
+            raise ValueError(f"duplicate activation case id: {case['id']}")
+        ids.add(case["id"])
+        categories.add(case["category"])
+        outcomes.add((case["should_activate"], case["locale"]))
+    if not REQUIRED_ACTIVATION_CATEGORIES <= categories:
+        raise ValueError(f"missing activation categories: {sorted(REQUIRED_ACTIVATION_CATEGORIES - categories)}")
+    for should_activate in (True, False):
+        if not any(outcome == should_activate for outcome, _ in outcomes):
+            raise ValueError(f"activation fixtures need {'positive' if should_activate else 'negative'} cases")
+    missing = sorted(
+        f"{'positive' if outcome else 'negative'}/{locale}"
+        for outcome in (True, False) for locale in sorted(ACTIVATION_LOCALES)
+        if (outcome, locale) not in outcomes
+    )
+    if missing:
+        raise ValueError(f"activation locale/outcome coverage incomplete: {missing}")
 
 
 def package_files(package: Path, root: Path = ROOT) -> dict[Path, bytes]:
@@ -216,8 +277,11 @@ def package_files(package: Path, root: Path = ROOT) -> dict[Path, bytes]:
                 raise ValueError(f"broken or escaping reference: {package / relative}: {target}")
     skill = files[Path("SKILL.md")].decode("utf-8")
     metadata = frontmatter(skill)
-    if metadata["name"] != "mandala" or not metadata["description"] or len(metadata["description"]) > 1024:
+    validate_agent_skills_metadata(metadata, package.name)
+    # Repository policy: this repository ships exactly one Skill, named mandala.
+    if metadata["name"] != SKILL_NAME:
         raise ValueError(f"invalid Skill identity: {package}")
+    # Repository policy, following the Agent Skills recommendation to keep SKILL.md short.
     if len(skill.splitlines()) >= 500:
         raise ValueError(f"SKILL.md must be under 500 lines: {package}")
     validate_safety_contract(skill)
@@ -236,8 +300,13 @@ def main() -> None:
     if not isinstance(cases, list):
         raise ValueError("eval fixture must be a list")
     validate_eval_metadata(cases)
+    activation = json.loads((ROOT / "tests" / "evals" / "activation.json").read_text(encoding="utf-8"))
+    validate_activation_metadata(activation)
     validate_documentation(ROOT)
-    print(f"Mandala Skill packages valid and current; {len(cases)} behavioral evaluation fixtures validated; live agent evaluation is manual")
+    print(
+        f"Mandala Skill packages valid and current; {len(cases)} behavioral evaluation fixtures and "
+        f"{len(activation)} activation-routing fixtures validated; live agent evaluation is manual"
+    )
 
 
 if __name__ == "__main__":

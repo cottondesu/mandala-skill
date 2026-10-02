@@ -48,3 +48,25 @@ capacity-workaround の指示だけを変更した場合は、現在の生成 pa
 | B5 | `capacity-final-child` | r1–r7: 各8 children、r8: 7 children、計71 cells。最後の観点の下に、もう1つ必須チェック「最終確認」を追加して | 新しい `show --json` 後に合法な `add`。r8 配下の有効な ID ならよい。最終72 cells、r8 の子は8、既存 cells 不変。 |
 
 B4/B6 では、空きを作るだけの目的で `done`、`na`、`clean`、再初期化、無関係な coverage の削除・置換を提案または実行したら FAIL です。status 変更では構造上の容量は空きません。user 主導の再構成は提案できますが、mutation 前に明確な指示が必要です。通常の add が安全に拒否されただけなら MAJOR ではありません。B5 は合法な最終枠を誤って拒否しない確認であり、過去の B3 の慎重さは修正対象外です。正当な完了、証拠に基づく `na`、別途明示的に許可された clean は引き続き可能です。
+
+## description activation / routing fixture
+
+`evals/activation.json` は Skill metadata が意図する routing の境界を記録します。`evals/cases.json` の行動 fixture とは別物です。
+
+- **activation fixture:** この依頼で agent が `mandala` Skill を検討・読み込むべきか（`should_activate`）
+- **behavior fixture:** Skill が関係する場合に、どの Mandala state 操作がどの順序で許可されるか
+
+Skill を読み込むこと自体は Mandala の変更を許可しません。「Mandalaは使わないで」のような明示的な不使用の依頼は activation の判定基準にしません。agent が不使用ルールを確認するために Skill を読み込むことは正当であり、state を変更しない契約は行動 fixture で扱います。
+
+各 entry は Agent Skills の標準ではなく、この repository 独自の fixture schema（`id`、`category`、`locale`、`prompt`、`should_activate` の 5 項目のみ）に従います。`make check` が検査するのは fixture の構造と coverage（一意な ID、`en`/`ja` の locale、boolean の `should_activate`、必須 category、両 locale での positive/negative case）だけです。agent を起動せず、routing の挙動を証明しません。
+
+任意の手動 activation 確認では、各 case について次を行います。
+
+1. 現在の生成 package `dist/mandala/` を導入する。
+2. 新しい agent session を開始する。
+3. UI 操作で Skill を明示的に選択・起動しない。
+4. fixture の `prompt` をそのまま送る。
+5. agent 環境が信頼できる signal を出す場合は、Skill の routing や読み込みを観察する。
+6. 観察結果を `should_activate` と比較する。
+
+信頼できる routing signal がない環境では、その case を観察不能（unobservable）として記録します。最終回答の文面だけから activation を推測しないでください。activation 評価は CI では必須にしません。

@@ -2,7 +2,7 @@
 
 別リポジトリの [Mandala CLI](https://github.com/cottondesu/mandala) を使い、**宣言した目標の coverage gap** を追跡するための Agent Skill です。Codex と Claude Code に、Mandala の状態をいつ読み、いつ更新し、結果をどう解釈するかを教えます。CLI 本体は含まず、計画の自動生成や作業完了の証明もしません。
 
-v0.1.0 は手動コピーによる配布です。Agent Skill はエージェントへの指示なので、導入前に内容を確認してください。インストールした Skill package 自体はネットワークアクセスや認証情報を必要とせず、テレメトリーもありません。エージェント環境そのものの権限は別です。
+このSkillは手動コピーで配布します。Agent Skill はエージェントへの指示なので、導入前に内容を確認してください。インストールした Skill package 自体はネットワークアクセスや認証情報を必要とせず、テレメトリーもありません。エージェント環境そのものの権限は別です。
 
 ## 前提条件と互換性
 
@@ -42,11 +42,14 @@ cp -R src/mandala ~/.codex/skills/
 make build
 make check
 make test
+make release-check
 ```
 
 `make build` は `dist/mandala/` に正本と byte 単位で一致する共通 package を生成し、Codex と Claude Code の両方で使えます。`make check` と `make test` はこの生成物を必要とします。正本をコピーする導入には build も Python も不要です。
 
-build、validation、test は Python 標準ライブラリだけで動き、ネットワークは不要です。package の整合性、有効な指示文にある必須安全契約、`tests/evals/cases.json` の行動評価 fixture の構造と coverage metadata を検査します。Codex / Claude Code を起動したり、実際の agent behavior を保証したりはしません。release 前に[手動の行動評価](tests/README.ja.md)を実施してください。`dist/` を直接編集しないでください。
+build、validation、test は Python 標準ライブラリだけで動き、ネットワークは不要です。`make check` は package の整合性、有効な指示文にある必須安全契約、Agent Skills の `name`/`description` metadata 制約、`tests/evals/cases.json` の行動評価 fixture metadata、`tests/evals/activation.json` の activation routing fixture metadata を検査します。Codex / Claude Code を起動したり、実際の agent behavior を保証したりはしません。release 前に[手動の行動評価](tests/README.ja.md)を実施してください。`dist/` を直接編集しないでください。
+
+`make release-check` は `make build`、`make check`、`make test` を順番に実行した後、ローカルの Git hygiene（`git diff --check`、生成物や cache が tracked でないこと、`dist/mandala/` が tracked の `.gitignore` で ignore されていること、古い分割配布 layout への参照がないこと）を検査します。未 commit の変更があっても実行でき、live agent は起動せず、release も公開しません。
 
 ## ライセンス
 

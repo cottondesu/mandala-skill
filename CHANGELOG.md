@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.1 (unreleased)
+
+- Validate the canonical package against the Agent Skills name and description metadata constraints used by this repository.
+- Add bilingual activation-routing fixtures for explicit Mandala use and adjacent non-Mandala requests.
+- Add a deterministic local `make release-check` for build, validation, tests, and repository hygiene.
+
 ## v0.1.0 (2026-10-01)
 
 - Add the canonical Skill source package for manual-copy installation with Codex and Claude Code.

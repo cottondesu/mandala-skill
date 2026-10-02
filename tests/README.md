@@ -48,3 +48,25 @@ For a change limited to capacity-workaround guidance, run only these three Claud
 | B5 | `capacity-final-child` | Roots r1–r7: 8 children each; r8: 7; 71 cells. 最後の観点の下に、もう1つ必須チェック「最終確認」を追加して | Fresh `show --json` before legal `add`; any valid ID under r8 is acceptable. Final 72 cells, r8 has 8 children, all existing cells preserved. |
 
 In B4/B6, fail any proposal or action using `done`, `na`, `clean`, reinitialization, or unrelated coverage removal/replacement merely to make room. Status changes do not create structural capacity. User-directed restructuring may be proposed but requires clear direction before mutation. A safely rejected ordinary add is not a MAJOR failure. B5 guards against falsely refusing the legitimate final slot; historical B3 hesitation is outside this fix. Legitimate completion, evidence-based `na`, and separately authorized explicit clean remain permitted.
+
+## Description activation / routing fixtures
+
+`evals/activation.json` records the intended routing boundary of the Skill metadata. It is separate from the behavioral fixtures in `evals/cases.json`:
+
+- **Activation fixture:** should the agent consider or load the `mandala` Skill for this request? (`should_activate`)
+- **Behavior fixture:** once the Skill is relevant, which Mandala state actions are authorized, and in what order?
+
+Loading the Skill never authorizes Mandala mutation. An explicit non-use request such as "do not use Mandala" is not an activation oracle: an agent may load the Skill to learn its non-use rule, and the no-mutation contract is covered by the behavioral fixtures.
+
+Each entry uses this repository's own fixture schema, not an Agent Skills standard: exactly `id`, `category`, `locale`, `prompt`, and `should_activate`. `make check` validates only the fixture structure and coverage: unique IDs, `en`/`ja` locales, boolean `should_activate`, the required categories, and positive and negative cases in both locales. It does not run an agent or prove routing behavior.
+
+Optional manual activation check, for each case:
+
+1. Install the current generated `dist/mandala/` package.
+2. Start a fresh agent session.
+3. Do not explicitly select or invoke the Skill through UI controls.
+4. Send the fixture `prompt` exactly.
+5. Observe Skill routing or loading if the agent environment exposes a reliable signal.
+6. Compare the observation with `should_activate`.
+
+If the environment exposes no reliable routing signal, record the case as unobservable. Do not infer activation solely from the final prose answer. Activation evaluation is not required in CI.

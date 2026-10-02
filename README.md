@@ -2,7 +2,7 @@
 
 An Agent Skill for using the separate [Mandala CLI](https://github.com/cottondesu/mandala) to track **declared goal coverage gaps**. The Skill teaches Codex and Claude Code when to read or update Mandala state and how to interpret the results. It does not contain the CLI, generate a plan, or verify that work is complete.
 
-This is the v0.1.0 manual-copy distribution. Review the Skill instructions before installing them: an Agent Skill is instructions to an agent. The installed Skill package itself needs no network access or credentials and has no telemetry. Your agent environment may have its own capabilities.
+This Skill is distributed by manual copy. Review the Skill instructions before installing them: an Agent Skill is instructions to an agent. The installed Skill package itself needs no network access or credentials and has no telemetry. Your agent environment may have its own capabilities.
 
 ## Prerequisites and compatibility
 
@@ -42,11 +42,14 @@ Try an explicit request such as: “Use the mandala skill to track coverage for 
 make build
 make check
 make test
+make release-check
 ```
 
 `make build` creates a byte-equivalent package at `dist/mandala/` for both Codex and Claude Code; `make check` and `make test` require that output. Source-copy installation needs neither this build nor Python.
 
-Build, validation, and tests use the Python standard library and require no network. They check package integrity, required safety clauses in active instruction prose, and the structure and coverage metadata of behavioral evaluation fixtures in `tests/evals/cases.json`. They do not run Codex or Claude Code or establish live agent behavior. Run the [manual behavioral evaluation](tests/README.md) before release. Do not edit `dist/` directly.
+Build, validation, and tests use the Python standard library and require no network. `make check` validates package integrity, required safety clauses in active instruction prose, the Agent Skills `name`/`description` metadata constraints, behavioral fixture metadata in `tests/evals/cases.json`, and activation-routing fixture metadata in `tests/evals/activation.json`. They do not run Codex or Claude Code or establish live agent behavior. Run the [manual behavioral evaluation](tests/README.md) before release. Do not edit `dist/` directly.
+
+`make release-check` runs `make build`, `make check`, and `make test` in order, then local Git hygiene checks: `git diff --check`, no tracked generated or cache files, `dist/mandala/` ignored by the tracked `.gitignore`, and no stale split-distribution layout references. It allows uncommitted changes, does not run live agents, and does not publish a release.
 
 ## License
 

@@ -1,0 +1,79 @@
+[
+  {
+    "id": "explicit-tracking-en",
+    "category": "explicit-tracking",
+    "locale": "en",
+    "prompt": "Use Mandala to track coverage for this feature.",
+    "should_activate": true
+  },
+  {
+    "id": "explicit-tracking-ja",
+    "category": "explicit-tracking",
+    "locale": "ja",
+    "prompt": "Mandalaを使ってこの機能のcoverageを追跡して",
+    "should_activate": true
+  },
+  {
+    "id": "existing-gaps-en",
+    "category": "existing-mandala-tracking",
+    "locale": "en",
+    "prompt": "Check the required gaps in the existing Mandala project.",
+    "should_activate": true
+  },
+  {
+    "id": "existing-gaps-ja",
+    "category": "existing-mandala-tracking",
+    "locale": "ja",
+    "prompt": "既存のMandalaで残っている必須gapを確認して",
+    "should_activate": true
+  },
+  {
+    "id": "existing-update-en",
+    "category": "existing-mandala-tracking",
+    "locale": "en",
+    "prompt": "Mark the token-refresh check as done in our Mandala coverage.",
+    "should_activate": true
+  },
+  {
+    "id": "generic-gap-analysis-en",
+    "category": "generic-gap-analysis",
+    "locale": "en",
+    "prompt": "Review this design for missing edge cases.",
+    "should_activate": false
+  },
+  {
+    "id": "generic-gap-analysis-ja",
+    "category": "generic-gap-analysis",
+    "locale": "ja",
+    "prompt": "この設計の抜け漏れを洗い出して",
+    "should_activate": false
+  },
+  {
+    "id": "generic-task-management-en",
+    "category": "generic-task-management",
+    "locale": "en",
+    "prompt": "Track my project tasks and deadlines.",
+    "should_activate": false
+  },
+  {
+    "id": "generic-task-management-ja",
+    "category": "generic-task-management",
+    "locale": "ja",
+    "prompt": "今後のタスクを整理して管理して",
+    "should_activate": false
+  },
+  {
+    "id": "unrelated-mandala-en",
+    "category": "unrelated-mandala",
+    "locale": "en",
+    "prompt": "Create a geometric mandala illustration.",
+    "should_activate": false
+  },
+  {
+    "id": "unrelated-mandala-ja",
+    "category": "unrelated-mandala",
+    "locale": "ja",
+    "prompt": "マンダラアートの塗り絵のデザイン案を考えて",
+    "should_activate": false
+  }
+]
