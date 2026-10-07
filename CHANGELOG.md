@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.2.1 (unreleased)
+## v0.2.1 (2026-10-07)
 
 - Add offline replay/re-grade for recorded live-evaluation evidence, including compatible reconstruction of v0.2.0 snapshots.
 - Add detailed safety-contract coverage reports that distinguish declared scope, observed automated evidence, unobservable checks, and manual-review requirements.
