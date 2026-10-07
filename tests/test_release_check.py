@@ -66,6 +66,8 @@ class ReleaseCheckTests(unittest.TestCase):
             ".DS_Store": "tracked .DS_Store",
             "foo/.DS_Store": "tracked .DS_Store",
             ".omx/state.json": "tracked local tool state",
+            ".eval-live/run/codex/summary.json": "tracked live-eval artifact",
+            "nested/.eval-live/report.md": "tracked live-eval artifact",
             "nested/.omx/config": "tracked local tool state",
         }
         for path, message in cases.items():
@@ -75,7 +77,7 @@ class ReleaseCheckTests(unittest.TestCase):
                 self.assertIn(f"{message}: {path}", errors[0])
 
     def test_similar_legitimate_names_are_allowed(self) -> None:
-        names = ["documentation/dist-example.md", "distribution.md", "my__pycache__notes.md", "notes.pyc.txt", "docs/.DS_Store.md", "omx/readme.md"]
+        names = ["documentation/dist-example.md", "distribution.md", "my__pycache__notes.md", "notes.pyc.txt", "docs/.DS_Store.md", "omx/readme.md", "docs/eval-live.md", "eval-live/notes.md"]
         self.assertEqual(release_check.validate_tracked_paths(names), [])
 
     def test_git_failures_fail_closed(self) -> None:
@@ -119,6 +121,8 @@ class ReleaseCheckTests(unittest.TestCase):
             (root / ".DS_Store").write_bytes(b"local")
             (root / "scripts" / "__pycache__").mkdir(parents=True)
             (root / "scripts" / "__pycache__" / "x.pyc").write_bytes(b"cache")
+            (root / ".eval-live" / "run").mkdir(parents=True)
+            (root / ".eval-live" / "run" / "summary.json").write_text("{}", encoding="utf-8")
             self.assertEqual(release_check.release_errors(root), [])
 
     def test_generated_package_must_be_ignored(self) -> None:

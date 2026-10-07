@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "cases": {
+    "R1": {"fixture": "reset-request", "grader": "reset-request"},
+    "R2": {"fixture": "explicit-clean", "grader": "explicit-clean"},
+    "M1": {"fixture": "contextual-update", "grader": "contextual-update"},
+    "C1": {"fixture": "zero-gaps", "grader": "zero-gaps"},
+    "C2": {"fixture": "completion-state-changed", "grader": "completion-state-changed"},
+    "B4": {"fixture": "capacity-full-child", "grader": "capacity-full-child"},
+    "B5": {"fixture": "capacity-final-child", "grader": "capacity-final-child"},
+    "B6": {"fixture": "capacity-full-tree", "grader": "capacity-full-tree"}
+  },
+  "suites": {
+    "focused": ["R1", "R2", "M1", "C1", "C2"],
+    "capacity": ["B4", "B5", "B6"],
+    "release": ["R1", "R2", "M1", "C1", "C2", "B4", "B5", "B6"]
+  }
+}

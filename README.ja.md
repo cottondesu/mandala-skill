@@ -47,9 +47,17 @@ make release-check
 
 `make build` は `dist/mandala/` に正本と byte 単位で一致する共通 package を生成し、Codex と Claude Code の両方で使えます。`make check` と `make test` はこの生成物を必要とします。正本をコピーする導入には build も Python も不要です。
 
-build、validation、test は Python 標準ライブラリだけで動き、ネットワークは不要です。`make check` は package の整合性、有効な指示文にある必須安全契約、Agent Skills の `name`/`description` metadata 制約、`tests/evals/cases.json` の行動評価 fixture metadata、`tests/evals/activation.json` の activation routing fixture metadata を検査します。Codex / Claude Code を起動したり、実際の agent behavior を保証したりはしません。release 前に[手動の行動評価](tests/README.ja.md)を実施してください。`dist/` を直接編集しないでください。
+build、validation、test は Python 標準ライブラリだけで動き、ネットワークは不要です。`make check` は package の整合性、有効な指示文にある 23 個の安全契約（`tests/evals/contracts.json` の `STATE-001` などの固定 ID）、Agent Skills の `name`/`description` metadata 制約、`tests/evals/cases.json` の行動評価 fixture metadata、`tests/evals/activation.json` の activation routing fixture metadata、`tests/evals/live_suites.json` の live suite 定義を検査します。Codex / Claude Code を起動したり、実際の agent behavior を保証したりはしません。release 前に[手動の行動評価](tests/README.ja.md)を実施してください。`dist/` を直接編集しないでください。
 
 `make release-check` は `make build`、`make check`、`make test` を順番に実行した後、ローカルの Git hygiene（`git diff --check`、生成物や cache が tracked でないこと、`dist/mandala/` が tracked の `.gitignore` で ignore されていること、古い分割配布 layout への参照がないこと）を検査します。未 commit の変更があっても実行でき、live agent は起動せず、release も公開しません。
+
+ローカルの live-agent harness は、重要度の高いシナリオを使い捨て project 上で Codex または Claude Code に実行させ、command trace と Mandala state を検査します。明示的に実行したときだけ動き、CI では実行せず、各 agent CLI 自身のログインが必要です。自動判定の合格は手動の応答確認の代わりにはなりません。詳しくは[live 評価ガイド](tests/README.ja.md#live-agent-評価-harness)を参照してください。
+
+```sh
+make eval-live AGENT=codex SUITE=release
+python3 scripts/eval_live.py --agent claude --preflight
+python3 scripts/eval_live.py --agent claude --case R1
+```
 
 ## ライセンス
 

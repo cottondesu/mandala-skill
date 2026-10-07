@@ -1,0 +1,14 @@
+{"type":"system","subtype":"init","cwd":"/tmp/project","session_id":"11111111-2222-4333-8444-555555555555","tools":["Bash","Read","Skill"],"model":"example-model","permissionMode":"dontAsk","skills":["mandala","other-skill"]}
+{"type":"rate_limit_event","rate_limit_info":{"status":"allowed"}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_skill","name":"Skill","input":{"skill":"mandala"}}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_show","name":"Bash","input":{"command":"mandala --project /tmp/project show --json","description":"Inspect state"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_show","is_error":false,"content":"{\"schema_version\":1,\"goal\":\"Example\",\"cells\":[]}"}]},"tool_use_result":{"stdout":"{}","stderr":""}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_gaps","name":"Bash","input":{"command":"mandala --project /tmp/project gaps --required --json"}}]}}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_gaps","is_error":true,"content":"Exit code 1\n{\"schema_version\":1,\"gaps\":[{\"id\":\"late-check\",\"required\":true}]}"}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_denied","name":"Bash","input":{"command":"mandala --project /tmp/project show --json | python3 -c 'print(1)'"}}]}}
+{"type":"system","subtype":"permission_denied","tool_name":"Bash","tool_use_id":"toolu_denied","decision_reason_type":"mode","message":"denied"}
+{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"toolu_denied","is_error":true,"content":"Permission to use Bash has been denied."}]}}
+{"type":"assistant","message":{"content":[{"type":"tool_use","id":"toolu_lost","name":"Bash","input":{"command":"mandala --project /tmp/project status"}}]}}
+{"type":"system","subtype":"brand_new_event","detail":"unknown"}
+{"type":"assistant","message":{"content":[{"type":"text","text":"One required gap remains."}]}}
+{"type":"result","subtype":"success","is_error":false,"session_id":"11111111-2222-4333-8444-555555555555","result":"One required gap remains."}

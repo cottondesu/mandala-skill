@@ -128,6 +128,78 @@ class PackageTests(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "activation locale/outcome coverage incomplete"):
                         validate.validate_activation_metadata(changed)
 
+    def test_contract_catalog_is_stable_and_complete(self):
+        catalog = json.loads((ROOT / "tests" / "evals" / "contracts.json").read_text(encoding="utf-8"))
+        contracts = validate.validate_contract_catalog(catalog)
+        self.assertEqual(len(contracts), 23)
+        self.assertEqual(contracts["AUTH-001"]["slug"], "explicit-use")
+        self.assertEqual(contracts["VERIFY-001"]["slug"], "separate-verification")
+        self.assertEqual(validate.SAFETY_CONTRACT, {cid: item["clause"] for cid, item in contracts.items()})
+
+    def test_contract_catalog_rejects_invalid_entries(self):
+        catalog = json.loads((ROOT / "tests" / "evals" / "contracts.json").read_text(encoding="utf-8"))
+        entries = catalog["contracts"]
+        first = entries[0]
+        invalid = (
+            ({**catalog, "contracts": entries + [dict(first, slug="another")]}, "duplicate safety contract ID"),
+            ({**catalog, "contracts": entries[:-1] + [dict(entries[-1], slug=first["slug"])]}, "duplicate safety contract slug"),
+            ({**catalog, "contracts": [dict(first, id="auth-1")] + entries[1:]}, "invalid safety contract ID"),
+            ({**catalog, "contracts": [dict(first, id="AUTH-0001")] + entries[1:]}, "invalid safety contract ID"),
+            ({**catalog, "contracts": [dict(first, area="misc")] + entries[1:]}, "unknown safety contract area"),
+            ({**catalog, "contracts": [dict(first, clause="")] + entries[1:]}, "invalid safety contract entry"),
+            ({**catalog, "contracts": [dict(first, note="extra")] + entries[1:]}, "invalid safety contract entry"),
+            ({**catalog, "contracts": entries[1:]}, "expected 23 safety contracts"),
+            ({**catalog, "schema_version": 2}, "schema_version 1"),
+            ({**catalog, "contracts": []}, "non-empty contracts list"),
+        )
+        for changed, message in invalid:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(ValueError, message):
+                    validate.validate_contract_catalog(changed)
+
+    def test_contract_missing_from_active_prose_is_reported_by_id(self):
+        skill = (SOURCE / "SKILL.md").read_text(encoding="utf-8")
+        clause = validate.SAFETY_CONTRACT["COMP-002"]
+        with self.assertRaisesRegex(ValueError, r"COMP-002 \(completion-gate\)"):
+            validate.validate_safety_contract(skill.replace(clause, "", 1))
+
+    def test_fixture_contract_references_use_stable_ids(self):
+        cases = json.loads((ROOT / "tests" / "evals" / "cases.json").read_text(encoding="utf-8"))
+        self.assertTrue(all(validate.CONTRACT_ID.fullmatch(item) for case in cases for item in case["contracts"]))
+        replace = lambda old, new: [{**case, "contracts": [new if item == old else item for item in case["contracts"]]} for case in cases]
+        with self.assertRaisesRegex(ValueError, "legacy contract slug"):
+            validate.validate_eval_metadata(replace("STATE-001", "read-before-write"))
+        with self.assertRaisesRegex(ValueError, "unknown contract ID"):
+            validate.validate_eval_metadata(replace("STATE-001", "STATE-999"))
+        with self.assertRaisesRegex(ValueError, r"eval contract coverage incomplete: \['VERIFY-001'\]"):
+            validate.validate_eval_metadata([{**case, "contracts": [item for item in case["contracts"] if item != "VERIFY-001"] or ["STATE-001"]} for case in cases])
+
+    def test_live_suite_manifest_validation(self):
+        cases = json.loads((ROOT / "tests" / "evals" / "cases.json").read_text(encoding="utf-8"))
+        manifest = json.loads((ROOT / "tests" / "evals" / "live_suites.json").read_text(encoding="utf-8"))
+        validate.validate_live_suites(manifest, cases)
+        self.assertEqual(manifest["suites"]["release"], ["R1", "R2", "M1", "C1", "C2", "B4", "B5", "B6"])
+        def changed(**updates):
+            result = json.loads(json.dumps(manifest))
+            for path, value in updates.items():
+                section, key = path.split("__")
+                result[section][key] = value
+            return result
+        invalid = (
+            (changed(cases__R1={"fixture": "missing-fixture", "grader": "reset-request"}), "unknown live fixture ID"),
+            (changed(cases__R1={"fixture": "reset-request", "grader": "no-such-grader"}), "unknown live grader"),
+            (changed(cases__R1={"fixture": "reset-request", "grader": "reset-request", "prompt": "copied"}), "invalid live case entry"),
+            (changed(cases__R1={"fixture": "explicit-clean", "grader": "explicit-clean"}), "live case R1 must use fixture reset-request"),
+            (changed(suites__focused=["R1", "R1", "R2", "M1", "C1", "C2"]), "duplicate live alias in suite"),
+            (changed(suites__release=["R1", "R2", "M1", "C1", "C2", "B4", "B5"]), r"missing \['B6'\]"),
+            (changed(suites__capacity=["B4", "B5"]), "live suite capacity must contain"),
+            (changed(suites__extra=["Z9"]), "unknown live alias"),
+        )
+        for manifest_change, message in invalid:
+            with self.subTest(message=message):
+                with self.assertRaisesRegex(ValueError, message):
+                    validate.validate_live_suites(manifest_change, cases)
+
     def test_safety_contract_and_removed_clause_regressions(self):
         skill = (SOURCE / "SKILL.md").read_text(encoding="utf-8")
         validate.validate_safety_contract(skill)
@@ -154,18 +226,18 @@ class PackageTests(unittest.TestCase):
     def test_capacity_contract_rejects_individual_safety_removals(self) -> None:
         skill = (SOURCE / "SKILL.md").read_text(encoding="utf-8")
         removals = (
-            ("capacity-status-counts", "`done`"),
-            ("capacity-status-counts", "`na`"),
-            ("no-capacity-status-workaround", "`done`"),
-            ("no-capacity-status-workaround", "`na`"),
-            ("no-capacity-clean-workaround", "`clean`"),
-            ("no-capacity-clean-workaround", "reinitialization"),
-            ("no-capacity-coverage-replacement", "removal"),
-            ("no-capacity-coverage-replacement", "replacement"),
-            ("no-capacity-coverage-replacement", "merely to make room for another cell"),
-            ("capacity-restructure-direction", "report the structural limit"),
-            ("capacity-restructure-direction", "preserve existing state"),
-            ("capacity-restructure-direction", "ask the user for clear direction"),
+            ("CAP-001", "`done`"),
+            ("CAP-001", "`na`"),
+            ("CAP-002", "`done`"),
+            ("CAP-002", "`na`"),
+            ("CAP-003", "`clean`"),
+            ("CAP-003", "reinitialization"),
+            ("CAP-004", "removal"),
+            ("CAP-004", "replacement"),
+            ("CAP-004", "merely to make room for another cell"),
+            ("CAP-005", "report the structural limit"),
+            ("CAP-005", "preserve existing state"),
+            ("CAP-005", "ask the user for clear direction"),
         )
         for name, removed in removals:
             with self.subTest(contract=name, removed=removed):
@@ -188,7 +260,7 @@ class PackageTests(unittest.TestCase):
         skill = (SOURCE / "SKILL.md").read_text(encoding="utf-8")
         examples = "\n```sh\nmandala --help\n```\n~~~text\nmandala gaps --json\n~~~\n"
         validate.validate_safety_contract(skill + examples)
-        clause = validate.SAFETY_CONTRACT["explicit-use"]
+        clause = validate.SAFETY_CONTRACT["AUTH-001"]
         validate.validate_safety_contract(skill.replace(clause, "", 1) + "\n> " + clause + "\n")
 
     def test_generated_package_has_no_symlinks_or_user_home_paths(self):

@@ -42,6 +42,8 @@ def validate_tracked_paths(paths: list[str]) -> list[str]:
             errors.append(f"tracked Python cache: {path}")
         elif ".omx" in parts:
             errors.append(f"tracked local tool state: {path}")
+        elif ".eval-live" in parts:
+            errors.append(f"tracked live-eval artifact: {path}")
         elif parts and parts[-1] == ".DS_Store":
             errors.append(f"tracked .DS_Store: {path}")
     return errors

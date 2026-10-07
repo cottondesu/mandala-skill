@@ -47,9 +47,17 @@ make release-check
 
 `make build` creates a byte-equivalent package at `dist/mandala/` for both Codex and Claude Code; `make check` and `make test` require that output. Source-copy installation needs neither this build nor Python.
 
-Build, validation, and tests use the Python standard library and require no network. `make check` validates package integrity, required safety clauses in active instruction prose, the Agent Skills `name`/`description` metadata constraints, behavioral fixture metadata in `tests/evals/cases.json`, and activation-routing fixture metadata in `tests/evals/activation.json`. They do not run Codex or Claude Code or establish live agent behavior. Run the [manual behavioral evaluation](tests/README.md) before release. Do not edit `dist/` directly.
+Build, validation, and tests use the Python standard library and require no network. `make check` validates package integrity, the 23 safety contracts in active instruction prose (stable IDs such as `STATE-001` in `tests/evals/contracts.json`), the Agent Skills `name`/`description` metadata constraints, behavioral fixture metadata in `tests/evals/cases.json`, and activation-routing fixture metadata in `tests/evals/activation.json`, and the live-suite manifest in `tests/evals/live_suites.json`. They do not run Codex or Claude Code or establish live agent behavior. Run the [manual behavioral evaluation](tests/README.md) before release. Do not edit `dist/` directly.
 
 `make release-check` runs `make build`, `make check`, and `make test` in order, then local Git hygiene checks: `git diff --check`, no tracked generated or cache files, `dist/mandala/` ignored by the tracked `.gitignore`, and no stale split-distribution layout references. It allows uncommitted changes, does not run live agents, and does not publish a release.
+
+The local live-agent harness runs selected high-risk scenarios against Codex or Claude Code in disposable projects and checks command traces and Mandala state. It runs only when invoked, never in CI, and needs the agent CLI's own login. Automated passes do not replace manual response review. See the [live evaluation guide](tests/README.md#live-agent-evaluation-harness).
+
+```sh
+make eval-live AGENT=codex SUITE=release
+python3 scripts/eval_live.py --agent claude --preflight
+python3 scripts/eval_live.py --agent claude --case R1
+```
 
 ## License
 

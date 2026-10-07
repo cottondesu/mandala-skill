@@ -1,0 +1,14 @@
+{"type":"thread.started","thread_id":"00000000-0000-7000-8000-000000000001"}
+{"type":"item.completed","item":{"id":"item_0","type":"error","message":"configuration warning"}}
+{"type":"turn.started"}
+{"type":"item.completed","item":{"id":"item_1","type":"agent_message","text":"I will inspect the state first."}}
+{"type":"item.completed","item":{"id":"item_2","type":"reasoning","text":"unknown item type"}}
+{"type":"future.event","payload":{"anything":true}}
+{"type":"item.started","item":{"id":"item_3","type":"command_execution","command":"/bin/zsh -lc 'mandala --project /tmp/project show --json'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_3","type":"command_execution","command":"/bin/zsh -lc 'mandala --project /tmp/project show --json'","aggregated_output":"{\"schema_version\":1,\"goal\":\"Example\",\"cells\":[]}\n","exit_code":0,"status":"completed"}}
+{"type":"item.started","item":{"id":"item_4","type":"command_execution","command":"/bin/zsh -lc 'mandala --project /tmp/project gaps --required --json'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+{"type":"item.completed","item":{"id":"item_4","type":"command_execution","command":"/bin/zsh -lc 'mandala --project /tmp/project gaps --required --json'","aggregated_output":"{\"schema_version\":1,\"gaps\":[{\"id\":\"late-check\",\"required\":true}]}\n","exit_code":1,"status":"failed"}}
+{"type":"item.started","item":{"id":"item_5","type":"command_execution","command":"/bin/zsh -lc 'mandala --project /tmp/project status'","aggregated_output":"","exit_code":null,"status":"in_progress"}}
+not json at all
+{"type":"item.completed","item":{"id":"item_6","type":"agent_message","text":"One required gap remains."}}
+{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}

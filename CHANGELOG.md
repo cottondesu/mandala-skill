@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.0 (unreleased)
+
+- Assign stable IDs to the 23 safety contracts and use them throughout behavioral fixture coverage.
+- Add a local cross-agent live-evaluation harness for the focused freshness/reset/completion and capacity scenarios.
+- Capture normalized structured traces, deterministic state/process checks, and machine-readable evaluation reports without adding live-agent execution to CI.
+
 ## v0.1.1 (2026-10-02)
 
 - Validate the canonical package against the Agent Skills name and description metadata constraints used by this repository.

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "contracts": [
+    {"id": "AUTH-001", "slug": "explicit-use", "area": "authorization", "clause": "Mutate state only when the user clearly asks to use Mandala"},
+    {"id": "AUTH-002", "slug": "generic-request", "area": "authorization", "clause": "General planning, review, gap analysis, or task management alone must not start Mandala state."},
+    {"id": "AUTH-003", "slug": "explicit-non-use", "area": "authorization", "clause": "If the user explicitly asks not to use Mandala, do not mutate Mandala state."},
+    {"id": "STATE-001", "slug": "read-before-write", "area": "state", "clause": "Before the first Mandala mutation in each new user turn, run `mandala --project <project-root> show --json` and inspect the current state."},
+    {"id": "STATE-002", "slug": "no-cached-state-inspection", "area": "state", "clause": "A state inspection from an earlier turn does not satisfy this requirement."},
+    {"id": "STATE-003", "slug": "cli-owned-state", "area": "state", "clause": "Never directly edit `.mandala/state.json` or create notes, plans, ledgers, logs, scratch files, or agent metadata under `.mandala/`."},
+    {"id": "CLEAN-001", "slug": "no-automatic-clean", "area": "clean", "clause": "`clean` requires a separate, explicit destructive request to remove Mandala state; do not run it at task completion."},
+    {"id": "CLEAN-002", "slug": "reset-is-not-delete", "area": "clean", "clause": "A request to reset, reinitialize, or start Mandala over does not by itself authorize `clean` or deletion of existing state."},
+    {"id": "CLEAN-003", "slug": "reset-preserves-valid-state", "area": "clean", "clause": "If valid state exists, preserve it without `clean` or `init`, explain that reinitialization requires deleting existing state, and ask for a separate explicit destructive request before deletion."},
+    {"id": "CLEAN-004", "slug": "backup-is-not-delete", "area": "clean", "clause": "A backup does not authorize deletion."},
+    {"id": "CLEAN-005", "slug": "reset-preserves-invalid-state", "area": "clean", "clause": "If state is invalid or corrupt, report the problem without automatically deleting or repairing it."},
+    {"id": "CLI-001", "slug": "missing-cli", "area": "cli", "clause": "Do not create a custom or fake `.mandala/` state implementation."},
+    {"id": "CLI-002", "slug": "exit-one", "area": "cli", "clause": "Exit `1` from `status` or `gaps` means unresolved required gaps, not a crash."},
+    {"id": "COMP-001", "slug": "zero-gap", "area": "completion", "clause": "Zero required gaps means **only that currently declared required leaf cells are resolved**."},
+    {"id": "COMP-002", "slug": "completion-gate", "area": "completion", "clause": "For active Mandala tracking, run `mandala --project <project-root> gaps --required --json` in the same user turn immediately before any completion claim, including a claim that no declared required gaps remain, and inspect both its JSON payload and exit code."},
+    {"id": "COMP-003", "slug": "no-cached-gap-result", "area": "completion", "clause": "A previous turn's gap result, including zero gaps, does not satisfy this completion gate."},
+    {"id": "COMP-004", "slug": "no-gap-clearing-na", "area": "completion", "clause": "Never use `na` merely to eliminate a gap."},
+    {"id": "CAP-001", "slug": "capacity-status-counts", "area": "capacity", "clause": "`done` and `na` do not free structural capacity; resolved and optional cells still count toward root, child, and total-cell limits."},
+    {"id": "CAP-002", "slug": "no-capacity-status-workaround", "area": "capacity", "clause": "Never propose or perform status changes to existing cells (`done` or `na`),"},
+    {"id": "CAP-003", "slug": "no-capacity-clean-workaround", "area": "capacity", "clause": "`clean` or reinitialization,"},
+    {"id": "CAP-004", "slug": "no-capacity-coverage-replacement", "area": "capacity", "clause": "or removal or replacement of unrelated declared coverage merely to make room for another cell."},
+    {"id": "CAP-005", "slug": "capacity-restructure-direction", "area": "capacity", "clause": "When no legal slot is available for the requested cell, report the structural limit, preserve existing state, and ask the user for clear direction before restructuring declared coverage."},
+    {"id": "VERIFY-001", "slug": "separate-verification", "area": "verification", "clause": "Mandala gap status is separate from test results, behavior verification, and task-specific inspection."}
+  ]
+}

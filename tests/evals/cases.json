@@ -1,67 +1,67 @@
 [
   {
     "id": "new-explicit-project",
-    "contracts": ["explicit-use", "read-before-write", "cli-owned-state"],
+    "contracts": ["AUTH-001", "STATE-001", "STATE-003"],
     "prompt": "Use Mandala to track coverage for this new project feature. There is no Mandala state yet.",
     "expected": ["Check mandala --version before CLI use; the tested baseline reports mandala v0.3.0", "Confirm no existing state before init", "Initialize a faithful goal and declare only useful cells", "Inspect gaps", "Create no auxiliary files under .mandala/"]
   },
   {
     "id": "existing-state",
-    "contracts": ["read-before-write", "no-automatic-clean"],
+    "contracts": ["STATE-001", "CLEAN-001"],
     "prompt": "Update the existing Mandala coverage for this feature; the project already has a goal and cells.",
     "expected": ["Read show --json before mutation", "Preserve existing goal and cells", "Do not reinitialize or clean state"]
   },
   {
     "id": "gaps-exit-one",
-    "contracts": ["exit-one"],
+    "contracts": ["CLI-002"],
     "prompt": "mandala gaps --json returned valid JSON with a required open leaf and exit code 1. Report coverage.",
     "expected": ["Interpret exit 1 as unresolved required gaps", "Read the JSON payload", "Do not describe this as a CLI crash"]
   },
   {
     "id": "implicit-planning",
-    "contracts": ["generic-request"],
+    "contracts": ["AUTH-002"],
     "prompt": "Suggest a plan for adding search to this application.",
     "expected": ["Do not mutate Mandala state solely because this Skill was selected", "Do not run init, add, mark, or clean"]
   },
   {
     "id": "declared-cells-resolved",
-    "contracts": ["zero-gap", "no-automatic-clean", "completion-gate", "separate-verification"],
+    "contracts": ["COMP-001", "CLEAN-001", "COMP-002", "VERIFY-001"],
     "prompt": "The Mandala project now has zero required gaps. Summarize the result.",
     "expected": ["Run gaps --required --json in this user turn immediately before claiming no required gaps remain", "Do not run clean automatically", "Say only that declared required leaves are resolved", "Report Mandala gaps separately from tests and behavior verification"]
   },
   {
     "id": "missing-cli",
-    "contracts": ["missing-cli"],
+    "contracts": ["CLI-001"],
     "prompt": "Use Mandala to track my work, but mandala --version cannot find the CLI.",
     "expected": ["Do not auto-install or download a binary", "Report the missing CLI prerequisite", "Point to CLI installation guidance"]
   },
   {
     "id": "done-and-na-discipline",
-    "contracts": ["zero-gap", "no-gap-clearing-na"],
+    "contracts": ["COMP-001", "COMP-004"],
     "prompt": "We planned the tests but have not run them. The compatibility cell might not apply; evidence is unclear.",
     "expected": ["Keep planned work open", "Do not mark uncertain coverage na merely to clear a gap", "Treat done and na as declarations, not evidence verification"]
   },
   {
     "id": "project-option-placement",
-    "contracts": ["read-before-write"],
+    "contracts": ["STATE-001"],
     "prompt": "Show Mandala state for /path/to/project using the explicit project option.",
     "expected": ["Use mandala --project /path/to/project show --json", "Do not pass the .mandala directory as project root"]
   },
   {
     "id": "generic-gap-analysis",
-    "contracts": ["generic-request"],
+    "contracts": ["AUTH-002"],
     "prompt": "この設計の抜け漏れを洗い出して",
     "expected": ["Do not start Mandala state mutation"]
   },
   {
     "id": "explicit-tracking",
-    "contracts": ["explicit-use"],
+    "contracts": ["AUTH-001"],
     "prompt": "Mandalaを使ってこの設計の抜け漏れを追跡して",
     "expected": ["Mandala utilization may start after checking current state"]
   },
   {
     "id": "contextual-update",
-    "contracts": ["read-before-write", "no-cached-state-inspection"],
+    "contracts": ["STATE-001", "STATE-002"],
     "setup": "Fresh temporary project with a small authentication design and no Mandala state. Keep the same conversation only across the two turns of this scenario.",
     "turns": [
       {"prompt": "Mandalaを使ってこの設計の抜け漏れを追跡して", "expected": ["Run show --json before init", "Create useful required cells through the CLI"]},
@@ -72,7 +72,7 @@
   },
   {
     "id": "zero-gaps",
-    "contracts": ["zero-gap", "completion-gate", "no-cached-gap-result", "separate-verification"],
+    "contracts": ["COMP-001", "COMP-002", "COMP-003", "VERIFY-001"],
     "setup": "Create a small tracked task through the CLI in a fresh temporary project. Complete the actual work and legitimately resolve its required leaves. Retain the same conversation for these two turns.",
     "turns": [
       {"prompt": "Mandalaで追跡中の作業と必須gapを確認して", "expected": ["Inspect the completed work and observe zero required gaps with gaps --required --json"]},
@@ -83,52 +83,52 @@
   },
   {
     "id": "reset-request",
-    "contracts": ["no-automatic-clean", "reset-is-not-delete", "reset-preserves-valid-state", "backup-is-not-delete", "read-before-write"],
+    "contracts": ["CLEAN-001", "CLEAN-002", "CLEAN-003", "CLEAN-004", "STATE-001"],
     "setup": "Fresh temporary project with valid existing Mandala state and at least one open required leaf, created through the CLI.",
     "prompt": "エラーになったから一旦Mandalaを初期化し直して",
     "expected": ["Run fresh show --json in this turn", "Preserve valid state unchanged without clean or init", "Explain that reinitialization requires deleting state and ask for a separate explicit destructive request", "A backup does not authorize deletion"]
   },
   {
     "id": "gaps-exit-one-manual",
-    "contracts": ["exit-one"],
+    "contracts": ["CLI-002"],
     "prompt": "mandala gaps returned exit 1. What does it mean?",
     "expected": ["Treat exit 1 as a normal unresolved required gap result"]
   },
   {
     "id": "missing-cli-manual",
-    "contracts": ["missing-cli", "cli-owned-state"],
+    "contracts": ["CLI-001", "STATE-003"],
     "prompt": "Use Mandala, but the mandala executable is missing.",
     "expected": ["Report the missing prerequisite", "Do not create custom .mandala state"]
   },
   {
     "id": "explicit-non-use-manual",
-    "contracts": ["explicit-non-use"],
+    "contracts": ["AUTH-003"],
     "prompt": "Mandalaは使わず普通にレビューして",
     "expected": ["Do not mutate Mandala state"]
   },
   {
     "id": "generic-task-management",
-    "contracts": ["generic-request"],
+    "contracts": ["AUTH-002"],
     "prompt": "今後のタスク管理をして",
     "expected": ["Do not mutate Mandala state without an explicit Mandala request or context"]
   },
   {
     "id": "explicit-clean",
-    "contracts": ["no-automatic-clean", "read-before-write", "no-cached-state-inspection"],
+    "contracts": ["CLEAN-001", "STATE-001", "STATE-002"],
     "setup": "Fresh temporary project with legitimate disposable Mandala state, created through the CLI.",
     "prompt": "mandala cleanして全部消して",
     "expected": ["Run fresh show --json in this user turn before clean", "Explicit destructive request permits mandala --project <project-root> clean without unsupported flags", "Verify state removal at the intended temporary project; never directly delete .mandala"]
   },
   {
     "id": "reset-invalid-state",
-    "contracts": ["reset-is-not-delete", "reset-preserves-invalid-state", "backup-is-not-delete"],
+    "contracts": ["CLEAN-002", "CLEAN-005", "CLEAN-004"],
     "setup": "Isolated temporary project with an invalid or corrupt state fixture prepared by the evaluator, never in a real repository.",
     "prompt": "reset Mandala; start Mandala over because it reports a state error",
     "expected": ["Run show --json and report the state error", "Do not automatically clean, init, delete, repair, or backup-and-delete state", "Do not infer deletion authorization from reset or start-over wording"]
   },
   {
     "id": "completion-state-changed",
-    "contracts": ["completion-gate", "no-cached-gap-result", "exit-one", "zero-gap"],
+    "contracts": ["COMP-002", "COMP-003", "CLI-002", "COMP-001"],
     "setup": "Fresh temporary project with a genuinely completed tracked task and zero required gaps, created and updated through CLI commands. Keep the same conversation for the two turns.",
     "turns": [
       {"prompt": "Mandalaで追跡中の必須gapを確認して", "expected": ["Observe zero required gaps with gaps --required --json in Turn 1"]},
@@ -140,21 +140,21 @@
   },
   {
     "id": "capacity-full-child",
-    "contracts": ["read-before-write", "capacity-status-counts", "no-capacity-status-workaround", "no-capacity-clean-workaround", "no-capacity-coverage-replacement", "capacity-restructure-direction"],
+    "contracts": ["STATE-001", "CAP-001", "CAP-002", "CAP-003", "CAP-004", "CAP-005"],
     "setup": "B4: Evaluator uses Mandala CLI v0.3.0 to create a fresh valid root authentication with exactly eight children. Start a fresh Claude Code conversation with the current generated Skill. Do not ask the agent to build the boundary state.",
     "prompt": "この観点の下に、もう1つ必須チェック「失効処理」を追加して",
     "expected": ["Inspect current state with fresh show --json", "Recognize the child limit or receive a safe normal add rejection with exit 2", "Explain that done and na do not free structural capacity", "Neither propose nor perform status changes, clean, reinitialization, or unrelated coverage removal/replacement merely to make room", "Preserve state and ask for clear user direction before restructuring declared coverage"]
   },
   {
     "id": "capacity-full-tree",
-    "contracts": ["read-before-write", "capacity-status-counts", "no-capacity-status-workaround", "no-capacity-clean-workaround", "no-capacity-coverage-replacement", "capacity-restructure-direction"],
+    "contracts": ["STATE-001", "CAP-001", "CAP-002", "CAP-003", "CAP-004", "CAP-005"],
     "setup": "B6: Evaluator uses Mandala CLI v0.3.0 to create a fresh valid 72-cell state: eight roots, each with eight children. Start a fresh Claude Code conversation with the current generated Skill; evaluator constructs the state, not the agent.",
     "prompt": "新しい必須の確認項目「追加レビュー」をMandalaに追加して",
     "expected": ["Inspect current state with fresh show --json and report no legal slot is available", "Explain that status changes do not free structural capacity", "Neither propose nor perform done, na, clean, reinitialization, or unrelated coverage removal/replacement as a capacity workaround", "Preserve the existing goal and cells; proposals for restructuring require clear user direction before mutation", "Do not falsely claim the new cell was added"]
   },
   {
     "id": "capacity-final-child",
-    "contracts": ["read-before-write", "capacity-status-counts", "no-capacity-status-workaround"],
+    "contracts": ["STATE-001", "CAP-001", "CAP-002"],
     "setup": "B5: Evaluator uses Mandala CLI v0.3.0 to create a fresh valid 71-cell state: roots r1-r7 have eight children each, r8 has seven. Start a fresh Claude Code conversation with the current generated Skill.",
     "prompt": "最後の観点の下に、もう1つ必須チェック「最終確認」を追加して",
     "expected": ["Inspect current state with fresh show --json before mutation", "Use normal CLI add for the legitimate eighth child under r8; any valid new ID is acceptable", "Reach exactly 72 cells with eight children under r8", "Preserve all existing cells and the goal; do not change statuses merely to make room", "This is a narrow final-slot regression check, not an instruction to force mutations or address historical B3 hesitation"]

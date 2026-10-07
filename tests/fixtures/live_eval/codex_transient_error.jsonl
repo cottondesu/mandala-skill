@@ -1,0 +1,5 @@
+{"type":"thread.started","thread_id":"00000000-0000-7000-8000-000000000003"}
+{"type":"turn.started"}
+{"type":"error","message":"Reconnecting... 1/5"}
+{"type":"item.completed","item":{"id":"item_0","type":"agent_message","text":"Done."}}
+{"type":"turn.completed","usage":{"input_tokens":1,"output_tokens":1}}
