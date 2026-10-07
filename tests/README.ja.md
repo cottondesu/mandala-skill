@@ -117,6 +117,62 @@ python3 scripts/eval_live.py --agent codex --case R1 --case B5 --timeout 300
 
 各 case は `manual_review_required` を記録し、レポートには人が `final.txt` で確認すべき点を書きます。数値スコアや model-as-judge はありません。case は 1 つずつ実行し、不合格の case を自動で再試行しません。実行が中断された場合（Ctrl-C や SIGTERM）、harness は agent の process group を止め、未完了の case を `NOT_RUN` にし、`summary.json` に `complete: false`、`report.md` に INCOMPLETE の表示を書いて、終了コード `2` で終わります。このような実行は完了した suite の結果として扱いません。`contract_coverage.exercised` は、完了した case の fixture、自動検査、手動確認の注記のいずれかに含まれる契約を列挙します。終了コードは、すべて `AUTO_PASS` なら `0`、`AUTO_FAIL` があれば `1`、preflight・設定・adapter・環境・判定不能のときは `2` です。手動確認が必要なことだけでは終了コードは変わりません。
 
-**成果物** は Git ignore される `.eval-live/<run-id>/<agent>/` に書き出します。`summary.json`、`report.md`、`cases/<alias>/`（`result.json`、`normalized.jsonl`、`raw-turnN.jsonl`、`final.txt`、`stderr.txt`）です。`--keep-workdirs` を付けると、各使い捨て project を実行後にそこへコピーします。`--output-dir` は空である必要があり、中身を消すことはありません。JSON 成果物にはすべて `schema_version: 1` が付き、互換性のない形式変更では schema version を上げます。派生成果物では一時 project のパスを `<project-root>` に置き換えますが、raw trace は agent CLI が出力したままです。harness は環境変数や認証情報を記録しませんが、raw trace はローカルの評価成果物なので、共有する前に内容を確認してください。`make release-check` は tracked の `.eval-live` パスを拒否します。
+**成果物** は Git ignore される `.eval-live/<run-id>/<agent>/` に書き出します。`summary.json`、`report.md`、`coverage.json`、`coverage.md`、`cases/<alias>/`（`result.json`、`normalized.jsonl`、`evidence.json`、`raw-turnN.jsonl`、`final.txt`、`stderr.txt`）です。`evidence.json`（`artifact_type: mandala-live-evidence`）は grader が使った正規化済み `show --json` state snapshot（`before` と `after_turn`）を完全な形で保持し、`normalized.jsonl` の evaluator event 出力の切り詰めに依存しません。取得できなかった snapshot は `null` で、`turns_completed` には実際に完了した turn だけを記録します。raw agent trace、環境、認証情報、session/thread ID は含みません。`--keep-workdirs` を付けると、各使い捨て project を実行後にそこへコピーします。`--output-dir` は空である必要があり、中身を消すことはありません。JSON 成果物にはすべて `schema_version: 1` が付き、互換性のない形式変更では schema version を上げます。派生成果物では一時 project のパスを `<project-root>` に置き換えますが、raw trace は agent CLI が出力したままです。harness は環境変数や認証情報を記録しませんが、raw trace はローカルの評価成果物なので、共有する前に内容を確認してください。`make release-check` は tracked の `.eval-live` パスを拒否します。
 
 live 評価は CI、`make check`、`make test`、`make release-check` では実行しません。parser と grader の動作は `fixtures/live_eval/` の合成 trace で unit test しています。release 前に harness を明示的に実行し、unsupported や inconclusive の case は、合格するまで再実行するのではなく、そのまま記録してください。
+
+## オフライン評価ツール
+
+これらのツールは記録済みの成果物だけを読みます。Codex、Claude Code、Mandala CLI を起動せず、ネットワークにもアクセスせず、記録された command を実行したり shell を使ったりせず、入力ディレクトリを変更しません。入力ディレクトリは信頼できないローカル入力として扱い、入力ルートが symlink の場合や `cases/` 以下に symlink がある場合は拒否し、ファイルは末尾の symlink をたどらずに開きます。これは通常の symlink のたどり込みに対するローカル成果物の防御であり、別プロセスが同時に入力ツリーを書き換える状況に対する sandbox ではありません。出力ディレクトリは空（または未作成）で、入力と重ならず、この repository 内なら `.eval-live/` 以下である必要があります。既存のディレクトリを消すことはありません。新しい機械可読成果物にはそれぞれ `artifact_type` と `schema_version: 1` が付きます。既存の `summary.json`、`result.json`、`normalized.jsonl` の schema は version 1 のままで、意味も変わりません。どのツールも CI では実行せず、unit test は合成成果物を使います。
+
+### Replay / 再判定
+
+```sh
+python3 scripts/eval_replay.py .eval-live/<run>/<agent>
+python3 scripts/eval_replay.py .eval-live/<run>/<agent> --case R1 --case B5
+python3 scripts/eval_replay.py .eval-live/<run>/<agent> --suite release --output-dir .eval-live/replays/example
+```
+
+replay は agent 単位の実行ディレクトリ（`summary.json` と `cases/`）を 1 つ受け取り、記録済みの決定的な証拠を、現在の `scripts/live_eval_cases.py` の grader と現在の `evals/live_suites.json` で再判定します。再実行ではなく再判定です。agent や Mandala CLI を再実行せず、最終回答の文面も再判定しません。複数 agent を含む実行ディレクトリは推測せずに拒否します。`--case` は繰り返し指定でき、`--suite` と `--case` は同時に使えません。どちらもなければ、source の summary にあるすべての case を replay します。既定の出力先は `.eval-live/replays/<replay-id>/` で、`summary.json`（`mandala-eval-replay-summary`）、`report.md`、`coverage.json`、`coverage.md`、`cases/<alias>/result.json`（`mandala-eval-replay-case`）を書きます。
+
+- **証拠。** `cases/<alias>/evidence.json` があり検証に通れば、その snapshot を正とします。ない場合（`evidence.json` 導入前に記録された成果物）は、`normalized.jsonl` の `actor: evaluator`、`phase: snapshot`、`kind: command` の event から snapshot を再構成します。turn 0 が `before`、turn N が `after_turn[N]` です。各 slot には、出力が完全な JSON として読める event がちょうど 1 つ必要です。snapshot の欠落、重複、不正、切り詰めがあれば、その case は理由付きで `UNREPLAYABLE` になり、推測はしません。raw trace、`final.txt`、`stderr.txt` は判定に使いません。
+- **`<project-root>`。** 派生成果物の `<project-root>` は `<` と `>` が shell の redirection として解釈されてしまうため、メモリ内での判定に限って合成した絶対パスに置き換えます。そのパスを作成することも、command を実行することもありません。replay の出力では `<project-root>` に戻します。
+- **対応付け。** source の alias が現在の manifest に同じ fixture で存在し、現在の grader があることが必要です。そうでなければ `UNREPLAYABLE` です。source が `ENVIRONMENT_ERROR`、`UNSUPPORTED`、`NOT_RUN` の case や、turn が欠けている case も `UNREPLAYABLE` で、Skill の振る舞いとして解釈し直すことはしません。
+- **状態。** 各 case には `source_status`、`replay_status`（`REPLAYED` または `UNREPLAYABLE`）、`graded_status`、`status_changed` を記録します。状態の変化は replay の出力にだけ記録し、source の `result.json` は変更しません。
+- **手動確認。** `manual_review_required` と確認の注記は引き継ぎ、`semantic_review` は `not replayed` にします。`final.txt` から手動確認の結果を推測せず、model-as-judge も使いません。
+- **来歴。** summary には source の実行 ID、agent、suite、Skill の Git SHA、`SKILL.md` の SHA-256、`summary.json` の SHA-256、現在の repository の Git SHA、未 commit 変更の有無、`SKILL.md` の SHA-256、両者の Skill hash が一致するか、現在の grader と fixture ファイルの SHA-256 を記録します。各 case には source の `result.json`、`normalized.jsonl`、`evidence.json` の SHA-256 を記録します。Skill hash の不一致は来歴情報であり、失敗ではありません。現在の作業ツリーに未 commit の変更がある場合、使われた grader を特定するのは Git SHA ではなく記録したファイル hash です。入力の絶対パスは記録しません。Git は現在の revision を読むためだけに使い、Git がなければ revision は不明として記録します。
+- **未対応の schema。** source の `summary.json`、`result.json`、`normalized.jsonl` の event、`evidence.json` の schema version が 1 以外なら、何も書かずに終了コード `2` で止まります。
+
+終了コードの優先順位は次のとおりです。入力・schema・設定の問題、`UNREPLAYABLE` の case、replay 結果が `INCONCLUSIVE` の case が 1 つでもあれば、他の case が `AUTO_FAIL` でも `2`。それ以外で replay した case に `AUTO_FAIL` があれば `1`。それ以外は `0` です。自動での再試行はしません。
+
+### 安全契約 coverage レポート
+
+```sh
+python3 scripts/eval_coverage.py .eval-live/<run>/<agent>
+python3 scripts/eval_coverage.py .eval-live/replays/<replay-id> --output-dir .eval-live/coverage/example
+```
+
+`coverage.json`（`mandala-contract-coverage`）と `coverage.md` は case の result ファイルと `evals/contracts.json` から再計算します。`summary.json` の `contract_coverage` は互換性のために残しますが、入力としては信頼しません。live 実行と replay はこれらのファイルを自動で書き、単体コマンドの既定の出力先は `.eval-live/coverage/<id>/` です。23 個の安全契約それぞれについて、契約 ID 順に次を列挙します。
+
+- `fixture_referenced_by`: fixture がその契約を宣言している case。**fixture の範囲は宣言された評価範囲であり、観測された証拠ではありません。**
+- `automatic_pass_checks` と `automatic_fail_checks`: その契約を観測した自動検査。**PASS も FAIL も観測された証拠として数えます**が、別々のリストに分け、FAIL は成功ではありません。
+- `automatic_unobservable_checks`: 証拠を観測または帰属できなかった自動検査。
+- `manual_review_required_by`: 記録された応答にまだ手動確認が必要な case。**手動確認が必要であることは、手動確認に合格したことではありません。** harness は確認者の判定を記録しません。
+
+`coverage_state` は便宜上のラベルで、優先順位は `AUTOMATED_OBSERVED`（PASS または FAIL の検査がある）> `UNOBSERVABLE_ONLY` > `MANUAL_REQUIRED_ONLY` > `FIXTURE_ONLY` > `NOT_EXERCISED` です。検査と手動確認の要求に数えるのは、完了した live の case（`AUTO_PASS`、`AUTO_FAIL`、`INCONCLUSIVE`）か `REPLAYED` の replay case だけです。環境エラー、unsupported、未実行、replay 不能の case は fixture の範囲だけに寄与します。未知の契約 ID は構造エラーです。合格率でも安全性の主張でもありません。終了コードは、レポートを生成できれば `0`、入力が不正または未対応なら `2` です。振る舞いの失敗は報告するデータであり、終了コードには反映しません。
+
+### 情報を減らした共有用 bundle
+
+```sh
+python3 scripts/eval_sanitize.py \
+  .eval-live/<run>/<agent> \
+  --output-dir .eval-live/exports/example
+```
+
+sanitizer は live の agent 実行ディレクトリか replay の出力ディレクトリを受け取り、`--output-dir` が必須です。whitelist 方式で、`manifest.json`（`mandala-sanitized-export`）、`summary.json`、`coverage.json`、`coverage.md`、`report.md`、縮約した `cases/<alias>/result.json` だけを書きます。縮約した result には case、fixture、status、契約 ID、手動確認の要否とその契約 ID、検査 ID、検査の契約、検査の status、`error.category` だけを残します。raw trace、`normalized.jsonl`、`evidence.json`、`final.txt`、`stderr.txt`、保持した workdir、agent の session ファイルや設定はコピーせず、検査の evidence 文、command や出力、エラーメッセージ、手動確認の注記本文、preflight の詳細、session/thread ID（仮名化せず削除）も含めません。残すメタデータ中の既知の repository、home、入力実行ディレクトリ、一時ディレクトリのパスは `<repo-root>`、`<home>`、`<source-run>`、`<tmp>` に置き換え、それ以外の `/Users/<name>` や `/home/<name>` で始まるパスも `<home>` にします。対象はこれらのパターンだけで、ローカルパスや個人を一般的に検出するものではありません。縮約した `summary.json` と `cases/<alias>/result.json` には `artifact_type: mandala-sanitized-export` と `part` が付くため、replay・coverage・sanitizer は bundle を入力として拒否します。レポートと coverage は縮約後のデータから作り直し、元のレポートはコピーしません。
+
+sanitizer は既知のローカル識別子を減らし、リスクの高い成果物を除外します。出力した bundle に機密情報が含まれないことを証明するものではありません。共有する前に bundle の内容を確認してください。secret scanner ではありません。共有用 bundle はレビューと共有のためのもので、決定的な再判定には使えません。manifest には `replayable: false` を記録し、replay には元のローカル成果物を使います。
+
+## タスク単位の実利用例
+
+`fixtures/field_usage/version_contracts.json`（`mandala-field-usage-example`）は、実際の Mandala 利用から識別情報を除いた例で、release の version 契約をタスクの coverage として追跡しています（Gem と CLI は `0.3.0`、JSON schema `3` は成功経路と失敗経路で確認、config schema `1` で version 2 は引き続き拒否、Ruby `>= 3.3`、Prism `>= 1.9, < 2`、追加依存なし）。`task_contracts` はタスク単位の coverage 項目であり、`evals/contracts.json` にある 23 個の Skill 安全契約のどれでもありません。行動評価・activation・live の fixture ではなく、replay の入力でもありません。`make check` がその構造を検査します。

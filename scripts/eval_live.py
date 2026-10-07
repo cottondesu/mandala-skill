@@ -25,10 +25,14 @@ import tempfile
 from typing import Dict, List, Optional
 
 if __package__:
+    from . import eval_coverage
+    from . import live_eval_artifacts as artifacts
     from . import live_eval_cases as cases_mod
     from . import validate
     from .live_eval_adapters import ADAPTERS, run_process, sanitized_env
 else:
+    import eval_coverage
+    import live_eval_artifacts as artifacts
     import live_eval_cases as cases_mod
     import validate
     from live_eval_adapters import ADAPTERS, run_process, sanitized_env
@@ -164,6 +168,14 @@ def run_case(alias: str, entry: dict, fixture: dict, adapter, env: Dict[str, str
     recorder = Recorder()
     finals: List[str] = []
     stderr_parts: List[str] = []
+    # Full snapshots for offline replay; normalized.jsonl truncates evaluator output.
+    before: Optional[dict] = None
+    after_turn: Dict[int, dict] = {}
+
+    def finish() -> dict:
+        evidence = artifacts.build_evidence(alias, fixture["id"], len(prompts), result["turns_completed"], before, after_turn)
+        return _finish_case(result, recorder, project, case_dir, finals, stderr_parts, keep_dir, evidence)
+
     with tempfile.TemporaryDirectory(prefix="mandala-live-") as workspace:
         project = Path(os.path.realpath(workspace)) / "project"
         project.mkdir()
@@ -177,8 +189,7 @@ def run_case(alias: str, entry: dict, fixture: dict, adapter, env: Dict[str, str
             before = evaluator.snapshot()
         except (cases_mod.SetupError, OSError, ValueError, subprocess.SubprocessError) as exc:
             result.update(status="ENVIRONMENT_ERROR", setup={"status": "failed"}, error={"category": "setup", "message": str(exc)})
-            return _finish_case(result, recorder, project, case_dir, finals, stderr_parts, keep_dir)
-        after_turn: Dict[int, dict] = {}
+            return finish()
         session_id = None
         for number, prompt in enumerate(prompts, start=1):
             code, stdout, stderr, timed_out = run_process(adapter.turn_argv(project, session_id), prompt, project, env, timeout)
@@ -194,7 +205,7 @@ def run_case(alias: str, entry: dict, fixture: dict, adapter, env: Dict[str, str
             if error:
                 status = "UNSUPPORTED" if error[0] == "unsupported" else "ENVIRONMENT_ERROR"
                 result.update(status=status, error={"category": error[0], "message": error[1]})
-                return _finish_case(result, recorder, project, case_dir, finals, stderr_parts, keep_dir)
+                return finish()
             if adapter.skill_load_observable:
                 result["skill_loaded"] = True
             session_id = parsed.session_id
@@ -208,16 +219,12 @@ def run_case(alias: str, entry: dict, fixture: dict, adapter, env: Dict[str, str
                     grader["between"](evaluator)
                 except (cases_mod.SetupError, OSError, ValueError, subprocess.SubprocessError) as exc:
                     result.update(status="ENVIRONMENT_ERROR", error={"category": "setup", "message": f"between turns: {exc}"})
-                    return _finish_case(result, recorder, project, case_dir, finals, stderr_parts, keep_dir)
+                    return finish()
                 evaluator.phase = "turn"
         result["skill_files_read"] = skill_files_read(recorder.events, project)
-        context = {"events": recorder.events, "project": str(project), "before": before, "after": after_turn[len(prompts)], "after_turn": after_turn}
-        checks = cases_mod.GRADERS[entry["grader"]]["grade"](context)
-        denial = cases_mod.permission_check(recorder.events, str(project))
-        result["checks"] = sorted(checks + ([denial] if denial else []), key=lambda item: item["id"])
-        result["status"] = cases_mod.case_status(result["checks"])
+        result["checks"], result["status"] = artifacts.grade_recorded(entry["grader"], recorder.events, str(project), before, after_turn, len(prompts))
         result["state"] = {"before": cases_mod.state_summary(before), "after": cases_mod.state_summary(after_turn[len(prompts)])}
-        return _finish_case(result, recorder, project, case_dir, finals, stderr_parts, keep_dir)
+        return finish()
 
 
 def turn_error(number: int, turns: int, parsed, session_id: Optional[str], adapter, code: Optional[int], timed_out: bool, timeout: float) -> Optional[tuple]:
@@ -273,8 +280,10 @@ def annotate_execution(events: List[dict], project: Path) -> List[dict]:
     return annotated
 
 
-def _finish_case(result: dict, recorder: Recorder, project: Path, case_dir: Path, finals: List[str], stderr_parts: List[str], keep_dir: Optional[Path]) -> dict:
+def _finish_case(result: dict, recorder: Recorder, project: Path, case_dir: Path, finals: List[str], stderr_parts: List[str], keep_dir: Optional[Path], evidence: Optional[dict] = None) -> dict:
     normalized = normalize_paths(annotate_execution(recorder.events, project), project)
+    if evidence is not None:
+        (case_dir / "evidence.json").write_text(json.dumps(normalize_paths(evidence, project), ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     (case_dir / "normalized.jsonl").write_text("".join(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n" for event in normalized), encoding="utf-8")
     (case_dir / "final.txt").write_text(normalize_paths("\n".join(finals), project), encoding="utf-8")
     (case_dir / "stderr.txt").write_text(normalize_paths("\n".join(stderr_parts), project), encoding="utf-8")
@@ -348,7 +357,7 @@ def render_report(summary: dict, results: List[dict], contracts: Dict[str, dict]
             lines.append("")
         for note in result["manual_review"]:
             lines.append(f"- Manual review ({', '.join(label(cid) for cid in note['contracts']) or 'task'}): {note['note']}")
-        lines += [f"- Artifacts: `cases/{result['case']}/` (result.json, normalized.jsonl, {', '.join(result['artifacts']['raw']) or 'no raw trace'}, final.txt)", ""]
+        lines += [f"- Artifacts: `cases/{result['case']}/` (result.json, normalized.jsonl, evidence.json, {', '.join(result['artifacts']['raw']) or 'no raw trace'}, final.txt)", ""]
     cov = summary["contract_coverage"]
     lines += ["## Contract coverage", "",
               f"- Exercised: {', '.join(cov['exercised']) or 'none'}",
@@ -357,6 +366,16 @@ def render_report(summary: dict, results: List[dict], contracts: Dict[str, dict]
               f"- Not exercised by this run: {', '.join(cov['not_exercised']) or 'none'}", "",
               "Raw traces are local evaluation artifacts. Review them before sharing.", ""]
     return "\n".join(lines)
+
+
+def write_rich_coverage(run_dir: Path) -> bool:
+    """Detailed coverage.json/coverage.md recomputed from the case artifacts just written (additive to summary.json)."""
+    try:
+        eval_coverage.write_own_coverage(run_dir)
+    except (ValueError, OSError) as exc:
+        print(f"eval-live: coverage report failed: {exc}", file=sys.stderr)
+        return False
+    return True
 
 
 def utc_now() -> str:
@@ -473,8 +492,10 @@ def main(argv: Optional[List[str]] = None) -> int:
             results += [not_run(alias, fixtures[manifest["cases"][alias]["fixture"]], "interrupted", "run interrupted before this case completed") for alias in aliases if alias not in done]
         meta["complete"] = not interrupted and len(results) == len(aliases)
         summary = write_summary(run_dir, name, meta, results, contracts, pre)
+        coverage_ok = write_rich_coverage(run_dir)
         print(f"[{name}] {summary['counts']}{' (INTERRUPTED)' if interrupted else ''} -> {run_dir.relative_to(ROOT) if ROOT in run_dir.parents else run_dir}/report.md")
-        codes.append(2 if interrupted else exit_status(results, pre["ok"]))
+        code = 2 if interrupted else exit_status(results, pre["ok"])
+        codes.append(code if coverage_ok or code == 1 else 2)
         if interrupted:
             break  # do not start another agent after an interruption
     return 1 if 1 in codes else max(codes)

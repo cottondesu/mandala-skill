@@ -117,6 +117,62 @@ python3 scripts/eval_live.py --agent codex --case R1 --case B5 --timeout 300
 
 Every case records `manual_review_required`; the report lists what a person still has to read in `final.txt`. There is no numeric score and no model-as-judge. Cases run one at a time, and a failing case is never retried automatically. If the run is interrupted (Ctrl-C or SIGTERM), the harness stops the agent's process group, marks unfinished cases `NOT_RUN`, writes `summary.json` with `complete: false` and an INCOMPLETE banner in `report.md`, and exits `2`; such a run is never a complete suite result. `contract_coverage.exercised` lists every contract named by a completed case's fixture, automated checks, or manual-review notes. The process exits `0` when every case is `AUTO_PASS`, `1` when any case is `AUTO_FAIL`, and `2` for preflight, configuration, adapter, environment, or inconclusive results. Manual review alone does not change the exit code.
 
-**Artifacts** go to the Git-ignored `.eval-live/<run-id>/<agent>/`: `summary.json`, `report.md`, and `cases/<alias>/` with `result.json`, `normalized.jsonl`, `raw-turnN.jsonl`, `final.txt`, and `stderr.txt`. `--keep-workdirs` copies each disposable project there afterwards. `--output-dir` must be empty and is never cleaned. All JSON artifacts carry `schema_version: 1`; an incompatible format change requires a new schema version. Derived artifacts replace the temporary project path with `<project-root>`; raw traces are kept as the agent CLI produced them. The harness records no environment variables or credentials, but raw traces are local evaluation artifacts: review them before sharing. `make release-check` rejects tracked `.eval-live` paths.
+**Artifacts** go to the Git-ignored `.eval-live/<run-id>/<agent>/`: `summary.json`, `report.md`, `coverage.json`, `coverage.md`, and `cases/<alias>/` with `result.json`, `normalized.jsonl`, `evidence.json`, `raw-turnN.jsonl`, `final.txt`, and `stderr.txt`. `evidence.json` (`artifact_type: mandala-live-evidence`) holds the full normalized `show --json` state snapshots the graders used (`before` and `after_turn`), independent of the evaluator event output truncation in `normalized.jsonl`; unavailable snapshots are `null`, and `turns_completed` records only turns that actually completed. It contains no raw agent trace, environment, credentials, or session/thread ID. `--keep-workdirs` copies each disposable project there afterwards. `--output-dir` must be empty and is never cleaned. All JSON artifacts carry `schema_version: 1`; an incompatible format change requires a new schema version. Derived artifacts replace the temporary project path with `<project-root>`; raw traces are kept as the agent CLI produced them. The harness records no environment variables or credentials, but raw traces are local evaluation artifacts: review them before sharing. `make release-check` rejects tracked `.eval-live` paths.
 
 Live evaluation never runs in CI, `make check`, `make test`, or `make release-check`. Parser and grader behavior is unit-tested with synthetic traces in `fixtures/live_eval/`. Run the harness explicitly before release, and record unsupported or inconclusive cases honestly instead of rerunning until they pass.
+
+## Offline evaluation tools
+
+These tools read recorded artifacts only. They never start Codex, Claude Code, or Mandala CLI, make no network request, never execute a recorded command or use a shell, and never modify their source directory. Source directories are untrusted local input: a symlinked source root or any symlink under `cases/` is rejected, and files are opened without following a final symlink. This is local artifact hardening against ordinary symlink traversal, not a sandbox against a source tree that another process changes concurrently. Output directories must be empty (or absent), must not overlap the source, and inside this repository must be under `.eval-live/`; an existing directory is never cleaned. New machine-readable artifacts carry their own `artifact_type` and `schema_version: 1`; the existing `summary.json`, `result.json`, and `normalized.jsonl` schemas stay at version 1 with unchanged meaning. None of these tools run in CI; their unit tests use synthetic artifacts.
+
+### Replay / re-grade
+
+```sh
+python3 scripts/eval_replay.py .eval-live/<run>/<agent>
+python3 scripts/eval_replay.py .eval-live/<run>/<agent> --case R1 --case B5
+python3 scripts/eval_replay.py .eval-live/<run>/<agent> --suite release --output-dir .eval-live/replays/example
+```
+
+Replay takes one agent-level run directory (`summary.json` plus `cases/`) and re-grades the recorded deterministic evidence with the current graders in `scripts/live_eval_cases.py` and the current `evals/live_suites.json`. It is a re-grade, not a re-execution: it does not rerun an agent or Mandala CLI and does not re-grade final prose. A run directory holding several agents is rejected instead of guessed. `--case` may repeat; `--suite` and `--case` are exclusive; with neither, every case in the source summary is replayed. Output goes to `.eval-live/replays/<replay-id>/` by default: `summary.json` (`mandala-eval-replay-summary`), `report.md`, `coverage.json`, `coverage.md`, and `cases/<alias>/result.json` (`mandala-eval-replay-case`).
+
+- **Evidence.** When `cases/<alias>/evidence.json` exists and validates, its snapshots are authoritative. Otherwise (artifacts recorded before `evidence.json` existed) snapshots are rebuilt from `normalized.jsonl` evaluator events with `actor: evaluator`, `phase: snapshot`, `kind: command`: turn 0 is `before`, turn N is `after_turn[N]`. Every slot needs exactly one event whose output parses as complete JSON. A missing, duplicate, invalid, or truncated snapshot makes the case `UNREPLAYABLE` with the reason; nothing is guessed. Raw traces, `final.txt`, and `stderr.txt` are never read for grading.
+- **`<project-root>`.** Derived artifacts use the `<project-root>` placeholder, whose `<` and `>` would parse as shell redirections. For in-memory grading only, replay substitutes a synthetic absolute path; the path is never created and no command is run. Replay output shows `<project-root>` again.
+- **Mapping.** The source alias must exist in the current manifest with the same fixture, and a current grader must exist; otherwise the case is `UNREPLAYABLE`. Source `ENVIRONMENT_ERROR`, `UNSUPPORTED`, and `NOT_RUN` cases, or cases with missing turns, are `UNREPLAYABLE`, never reinterpreted as Skill behavior.
+- **Status.** Each case records `source_status`, `replay_status` (`REPLAYED` or `UNREPLAYABLE`), `graded_status`, and `status_changed`. A changed status is recorded only in the replay output; the source `result.json` stays untouched.
+- **Manual review.** `manual_review_required` and the review notes are carried over, and `semantic_review` is `not replayed`. Replay never infers a manual verdict from `final.txt` and uses no model-as-judge.
+- **Provenance.** The summary records the source run, agent, suite, Skill Git SHA, `SKILL.md` SHA-256, and `summary.json` SHA-256; the current repository Git SHA, dirty state, `SKILL.md` SHA-256, whether the two Skill hashes match, and SHA-256 of the current grader and fixture files. Each case records SHA-256 of its source `result.json`, `normalized.jsonl`, and `evidence.json`. A Skill hash mismatch is provenance, not a failure. When the current working tree is dirty, the recorded file hashes, not the Git SHA, identify the graders that were used. Absolute source paths are not recorded. Git is used only to read the current revision; without Git the revision is recorded as unknown.
+- **Unsupported schemas.** Any source `summary.json`, `result.json`, `normalized.jsonl` event, or `evidence.json` with a schema version other than 1 stops replay with exit `2` before anything is written.
+
+Exit codes, in precedence order: `2` for an input, schema, or configuration problem, any `UNREPLAYABLE` case, or any replayed `INCONCLUSIVE` case, even when another case is `AUTO_FAIL`; otherwise `1` when at least one replayed case is `AUTO_FAIL`; otherwise `0`. Nothing is retried.
+
+### Safety contract coverage report
+
+```sh
+python3 scripts/eval_coverage.py .eval-live/<run>/<agent>
+python3 scripts/eval_coverage.py .eval-live/replays/<replay-id> --output-dir .eval-live/coverage/example
+```
+
+`coverage.json` (`mandala-contract-coverage`) and `coverage.md` are recomputed from case result files and `evals/contracts.json`; the `contract_coverage` field in `summary.json` is kept for compatibility but never trusted as input. Live runs and replays write these files automatically; the standalone command writes to `.eval-live/coverage/<id>/` by default. For each of the 23 safety contracts, in contract-ID order, the report lists:
+
+- `fixture_referenced_by`: cases whose fixture declares the contract. **Fixture scope is declared evaluation scope, not observed evidence.**
+- `automatic_pass_checks` and `automatic_fail_checks`: automated checks that observed the contract. **PASS and FAIL both count as observed evidence**, but they stay in separate lists and FAIL is not success.
+- `automatic_unobservable_checks`: automated checks that could not observe or attribute the evidence.
+- `manual_review_required_by`: cases whose recorded response still needs manual review. **Manual review required is not manual review passed**; the harness records no reviewer verdict.
+
+`coverage_state` is one convenience label with precedence `AUTOMATED_OBSERVED` (any PASS or FAIL check) > `UNOBSERVABLE_ONLY` > `MANUAL_REQUIRED_ONLY` > `FIXTURE_ONLY` > `NOT_EXERCISED`. Only completed live cases (`AUTO_PASS`, `AUTO_FAIL`, `INCONCLUSIVE`) or `REPLAYED` replay cases contribute checks and manual-review requirements; environment, unsupported, not-run, and unreplayable cases contribute fixture scope only. Unknown contract IDs are a structural error. This is not a pass rate or a safety claim. Exit codes: `0` report generated; `2` malformed or unsupported input. Behavioral failures are reported data, not an exit status.
+
+### Privacy-reduced share bundle
+
+```sh
+python3 scripts/eval_sanitize.py \
+  .eval-live/<run>/<agent> \
+  --output-dir .eval-live/exports/example
+```
+
+The sanitizer accepts a live agent run directory or a replay output directory and requires `--output-dir`. It uses a whitelist and writes only `manifest.json` (`mandala-sanitized-export`), `summary.json`, `coverage.json`, `coverage.md`, `report.md`, and reduced `cases/<alias>/result.json` files. Reduced results keep the case, fixture, status, contract IDs, manual-review flag and contract IDs, check IDs, check contracts, check statuses, and `error.category`. It never copies raw traces, `normalized.jsonl`, `evidence.json`, `final.txt`, `stderr.txt`, kept workdirs, agent session files, or agent configuration, nor check evidence text, commands or output, error messages, manual-review note text, preflight details, or session/thread IDs (removed, not pseudonymized). Known repository, home, source-run, and temporary paths in retained metadata become `<repo-root>`, `<home>`, `<source-run>`, and `<tmp>`, and any other `/Users/<name>` or `/home/<name>` prefix becomes `<home>`. This catches only those patterns; it is not general detection of local paths or identities. The reduced `summary.json` and `cases/<alias>/result.json` carry `artifact_type: mandala-sanitized-export` with a `part` field, so replay, coverage, and the sanitizer reject a bundle as input. The report and coverage are regenerated from sanitized data; the source report is never copied.
+
+The sanitizer reduces known local identifiers and excludes high-risk artifacts. It does not prove that the resulting bundle contains no sensitive information. Review the bundle before sharing. It is not a secret scanner. Sanitized share bundles are for review/sharing, not deterministic re-grade: the manifest records `replayable: false`, and replay uses the original local artifacts.
+
+## Task-level field usage example
+
+`fixtures/field_usage/version_contracts.json` (`mandala-field-usage-example`) is a sanitized example from real-world Mandala use: tracking release version contracts as task coverage (Gem and CLI `0.3.0`, JSON schema `3` checked on success and failure paths, config schema `1` with version 2 still rejected, Ruby `>= 3.3`, Prism `>= 1.9, < 2`, and no added dependencies). Its `task_contracts` are task-level coverage items, not any of the 23 Skill safety contracts in `evals/contracts.json`. It is not a behavioral, activation, or live fixture and not a replay input. `make check` validates its structure.

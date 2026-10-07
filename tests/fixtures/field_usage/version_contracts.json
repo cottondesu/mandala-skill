@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "artifact_type": "mandala-field-usage-example",
+  "id": "release-version-contracts",
+  "source": "sanitized-real-world-usage",
+  "goal": "Verify release version contracts",
+  "task_contracts": [
+    {
+      "id": "gem-version",
+      "label": "Gem",
+      "value": "0.3.0"
+    },
+    {
+      "id": "cli-version",
+      "label": "CLI",
+      "value": "0.3.0"
+    },
+    {
+      "id": "json-schema",
+      "label": "JSON schema",
+      "value": "3",
+      "verification": [
+        "success-path",
+        "failure-path"
+      ]
+    },
+    {
+      "id": "config-schema",
+      "label": "config schema",
+      "value": "1",
+      "verification": [
+        "version-2-rejected"
+      ]
+    },
+    {
+      "id": "ruby-version",
+      "label": "Ruby",
+      "value": ">= 3.3"
+    },
+    {
+      "id": "prism-version",
+      "label": "Prism",
+      "value": ">= 1.9, < 2"
+    },
+    {
+      "id": "dependencies-added",
+      "label": "dependencies added",
+      "value": "none"
+    }
+  ]
+}

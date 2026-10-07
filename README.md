@@ -59,6 +59,16 @@ python3 scripts/eval_live.py --agent claude --preflight
 python3 scripts/eval_live.py --agent claude --case R1
 ```
 
+Recorded runs can be inspected offline without an agent, Mandala CLI, or network. Replay re-grades recorded evidence with the current deterministic graders (it never reruns an agent or Mandala CLI and never re-grades final prose). The coverage report separates declared fixture scope from observed automated evidence and manual-review requirements. The sanitizer writes a whitelist-based, privacy-reduced share bundle; it is not a secret scanner, its output must be reviewed before sharing, and it cannot be replayed. See [offline evaluation tools](tests/README.md#offline-evaluation-tools).
+
+```sh
+python3 scripts/eval_replay.py .eval-live/<run>/<agent> --case B5
+python3 scripts/eval_coverage.py .eval-live/<run>/<agent>
+python3 scripts/eval_sanitize.py \
+  .eval-live/<run>/<agent> \
+  --output-dir .eval-live/exports/example
+```
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

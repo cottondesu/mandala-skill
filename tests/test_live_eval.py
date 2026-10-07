@@ -1,4 +1,4 @@
-from contextlib import redirect_stdout
+from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 import io
 import json
@@ -7,10 +7,13 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 
 from scripts import eval_live
 from scripts import live_eval_cases as cases
+from scripts import eval_replay
 from scripts.live_eval_adapters import ClaudeAdapter, CodexAdapter, TurnResult, run_process, sanitized_env
+from tests import eval_artifact_fixtures as fx
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -621,6 +624,255 @@ class RunnerTests(unittest.TestCase):
         self.assertNotIn("$(AGENT)", "\n".join(targets["eval-live"]))
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertNotIn("eval", workflow)
+
+
+class FakeMandala:
+    """In-memory Mandala CLI whose `show --json` output carries long titles (larger than the event output limit)."""
+
+    def __init__(self, title_size=400, fail_init=False, fail_add=()):
+        self.goal, self.cells, self.title_size, self.fail_init, self.fail_add = None, {}, title_size, fail_init, set(fail_add)
+
+    def run(self, args):
+        command = args[0]
+        if command == "init":
+            if self.fail_init:
+                return 2, "", "E_INIT"
+            self.goal = args[1]
+            return 0, "", ""
+        if self.goal is None:
+            return 2, "", "E_NO_PROJECT: no Mandala project"
+        if command == "add":
+            cell_id = args[-1]
+            if cell_id in self.fail_add:
+                return 2, "", f"E_ADD {cell_id}"
+            parent = cell_id.rsplit(".", 1)[0] if "." in cell_id else ""
+            if parent:
+                self.cells[parent]["status"] = "expanded"
+            self.cells[cell_id] = fx.cell(cell_id, title_size=self.title_size)
+            return 0, f"added {cell_id}", ""
+        if command == "show":
+            return 0, fx.show_output(self.goal, sorted(self.cells.values(), key=lambda cell: cell["id"])), ""
+        if command == "done":
+            self.cells[args[1]]["status"] = "done"
+            return 0, "", ""
+        if command == "gaps":
+            gaps = [{"id": cell["id"], "required": True} for cell in self.cells.values()
+                    if cell["status"] == "open" and not any(other["parent"] == cell["id"] for other in self.cells.values())]
+            return (1 if gaps else 0), json.dumps({"gaps": gaps}), ""
+        return 2, "", f"unsupported {command}"
+
+
+def fake_evaluator(mandala):
+    class FakeEvaluator(cases.Evaluator):
+        def run(self, *args, expect=(0,)):
+            code, stdout, stderr = mandala.run(args)
+            argv = [self.mandala, "--project", str(self.project), *args]
+            self.record(actor="evaluator", phase=self.phase, turn=self.turn, kind="command", argv=argv, exit_code=code, output=(stdout + stderr)[:20000])
+            if expect is not None and code not in expect:
+                raise cases.SetupError(f"evaluator `mandala {' '.join(args)}` exited {code}")
+            return code, stdout, stderr
+    return FakeEvaluator
+
+
+class FakeAdapter:
+    name, executable, skill_load_observable = "codex", "fake-agent", False
+
+    def skill_dir(self, project):
+        return project / ".codex" / "skills" / "mandala"
+
+    def turn_argv(self, project, session_id):
+        return ["fake-agent"]
+
+    def parse(self, lines, number):
+        result = TurnResult()
+        result.events = [json.loads(line) for line in lines]
+        result.session_id, result.final_text = "fake-session-12345", "Added r8.c8."
+        return result
+
+
+class ScriptedAdapter(FakeAdapter):
+    """Per-turn session IDs; None simulates an agent that reports no session."""
+
+    def __init__(self, sessions):
+        self.sessions = sessions
+
+    def parse(self, lines, number):
+        result = super().parse(lines, number)
+        result.session_id = self.sessions[number - 1]
+        return result
+
+
+def legacy_v020_grade(grader, events, project, before, after_turn, turns):
+    """The inline grading block eval_live.run_case used in v0.2.0, kept verbatim for comparison."""
+    context = {"events": events, "project": project, "before": before, "after": after_turn[turns], "after_turn": after_turn}
+    checks = cases.GRADERS[grader]["grade"](context)
+    denial = cases.permission_check(events, project)
+    checks = sorted(checks + ([denial] if denial else []), key=lambda item: item["id"])
+    return checks, cases.case_status(checks)
+
+
+class SharedGradingEquivalenceTests(unittest.TestCase):
+    def test_grade_recorded_matches_v020_live_grading(self):
+        from scripts import live_eval_artifacts as artifacts
+        final_before, final_after = tree([8] * 7 + [7]), tree([8] * 8)
+        done, late = snap([("implementation", "done")]), snap([("implementation", "done"), ("late-check", "open")])
+        first, second = snap([("auth", "open")]), snap([("auth", "open"), ("passkeys", "open")])
+        scenarios = [
+            ("reset-request", Trace().mandala(1, "show --json"), OPEN_STATE, {1: OPEN_STATE}, 1),
+            ("reset-request", Trace().mandala(1, "show --json").mandala(1, "clean"), OPEN_STATE, {1: ABSENT}, 1),
+            ("reset-request", Trace().mandala(1, "show --json", None, kind="command_denied"), OPEN_STATE, {1: OPEN_STATE}, 1),
+            ("explicit-clean", Trace().mandala(1, "show --json").mandala(1, "clean"), OPEN_STATE, {1: ABSENT}, 1),
+            ("contextual-update", Trace().mandala(1, "show --json", 2).mandala(1, "init Goal").mandala(1, "add auth").mandala(2, "show --json").mandala(2, "add passkeys"), ABSENT, {1: first, 2: second}, 2),
+            ("zero-gaps", Trace().mandala(2, "gaps --required --json", 0, '{"gaps":[]}'), done, {1: done, 2: done}, 2),
+            ("completion-state-changed", Trace().mandala(2, "gaps --required --json", 1, '{"gaps":[{"id":"late-check"}]}').mandala(2, "mark late-check na"), done, {1: done, 2: late}, 2),
+            ("capacity-full-child", Trace().mandala(1, "show --json").mandala(1, "done authentication.c1"), OPEN_STATE, {1: OPEN_STATE}, 1),
+            ("capacity-final-child", Trace().mandala(1, "show --json").mandala(1, "add r8.c8"), final_before, {1: final_after}, 1),
+            ("capacity-final-child", Trace().mandala(1, "add r8.c8").mandala(1, "show --json"), final_before, {1: final_after}, 1),
+            ("capacity-full-tree", Trace().add(1, "true || mandala --project /tmp/project show --json"), final_after, {1: final_after}, 1),
+        ]
+        for grader, trace, before, after_turn, turns in scenarios:
+            with self.subTest(grader=grader, events=len(trace.events)):
+                expected = legacy_v020_grade(grader, trace.events, PROJECT, before, after_turn, turns)
+                self.assertEqual(artifacts.grade_recorded(grader, trace.events, PROJECT, before, after_turn, turns), expected)
+        statuses = {legacy_v020_grade(grader, trace.events, PROJECT, before, after_turn, turns)[1] for grader, trace, before, after_turn, turns in scenarios}
+        self.assertEqual(statuses, {"AUTO_PASS", "AUTO_FAIL", "INCONCLUSIVE"})
+
+    def test_live_runner_has_no_second_grading_path(self):
+        source = (ROOT / "scripts" / "eval_live.py").read_text(encoding="utf-8")
+        self.assertEqual(source.count("artifacts.grade_recorded("), 1)
+        self.assertNotIn('["grade"](', source)
+        self.assertNotIn("permission_check(", source)
+
+
+class EvidenceArtifactTests(unittest.TestCase):
+    """New runs persist full normalized snapshots in cases/<alias>/evidence.json."""
+
+    def run_b5(self, root, mandala):
+        package = root / "package"
+        package.mkdir()
+        (package / "SKILL.md").write_text("fake", encoding="utf-8")
+
+        def agent_turn(argv, prompt, project, env, timeout):
+            mandala.run(("add", "r8.c8"))
+            events = [{"turn": 1, "actor": "agent", "kind": "command", "command": f"/bin/zsh -lc 'mandala --project {project} show --json'", "exit_code": 0, "output": "{}"},
+                      {"turn": 1, "actor": "agent", "kind": "command", "command": f"/bin/zsh -lc 'mandala --project {project} add r8.c8'", "exit_code": 0, "output": "added r8.c8"}]
+            return 0, "".join(json.dumps(event) + "\n" for event in events), "", False
+
+        fixture = next(case for case in json.loads((ROOT / "tests" / "evals" / "cases.json").read_text(encoding="utf-8")) if case["id"] == "capacity-final-child")
+        run_dir = root / "run" / "codex"
+        with mock.patch.object(eval_live, "GENERATED", package), mock.patch.object(eval_live, "run_process", agent_turn), \
+                mock.patch.object(cases, "Evaluator", fake_evaluator(mandala)):
+            result = eval_live.run_case("B5", {"fixture": "capacity-final-child", "grader": "capacity-final-child"}, fixture, FakeAdapter(), {}, run_dir / "cases" / "B5", 5, None)
+        pre = {"ok": True, "checks": [], "agent_version": "fake", "mandala_cli_version": "mandala v0.3.0"}
+        meta = {"run_id": "r", "suite": "cases", "skill_git_sha": "abc", "skill_sha256": "def", "complete": True}
+        eval_live.write_summary(run_dir, "codex", meta, [result], eval_live.load_inputs()[0], pre)
+        return result, run_dir
+
+    def test_evidence_preserves_full_state_beyond_event_truncation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            result, run_dir = self.run_b5(root, FakeMandala())
+            self.assertEqual(result["status"], "AUTO_PASS")
+            case_dir = run_dir / "cases" / "B5"
+            evidence = json.loads((case_dir / "evidence.json").read_text(encoding="utf-8"))
+            self.assertEqual((evidence["schema_version"], evidence["artifact_type"]), (1, "mandala-live-evidence"))
+            self.assertEqual((evidence["case"], evidence["fixture"], evidence["turns_expected"], evidence["turns_completed"]), ("B5", "capacity-final-child", 1, 1))
+            self.assertEqual(len(evidence["before"]["state"]["cells"]), 71)
+            self.assertEqual(len(evidence["after_turn"]["1"]["state"]["cells"]), 72)
+            self.assertEqual(set(evidence["after_turn"]["1"]["state"]["cells"][0]), {"id", "parent", "status", "required"})
+            self.assertEqual(evidence["before"]["state"]["goal"], "Authentication design coverage")
+            self.assertTrue(all(cell["status"] == "expanded" for cell in evidence["after_turn"]["1"]["state"]["cells"] if "." not in cell["id"]))
+            # The evaluator event output was truncated, so only evidence.json can support replay.
+            snapshots = [json.loads(line) for line in (case_dir / "normalized.jsonl").read_text(encoding="utf-8").splitlines() if '"snapshot"' in line]
+            self.assertTrue(all(len(event["output"]) == 20000 for event in snapshots))
+            text = (case_dir / "evidence.json").read_text(encoding="utf-8")
+            for forbidden in ("fake-session-12345", directory, "raw", "env"):
+                self.assertNotIn(forbidden, text)
+            for name in ("result.json", "normalized.jsonl", "raw-turn1.jsonl", "final.txt", "stderr.txt", "evidence.json"):
+                self.assertTrue((case_dir / name).is_file(), name)
+            self.assertEqual(json.loads((case_dir / "result.json").read_text(encoding="utf-8"))["schema_version"], 1)
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()), fx.no_agent_or_mandala_execution():
+                self.assertEqual(eval_replay.main([str(run_dir), "--output-dir", str(root / "replay")]), 0)
+            replayed = json.loads((root / "replay" / "cases" / "B5" / "result.json").read_text(encoding="utf-8"))
+            self.assertEqual((replayed["graded_status"], replayed["snapshot_source"]), ("AUTO_PASS", "evidence.json"))
+            self.assertEqual(replayed["checks"], result["checks"])
+            (case_dir / "evidence.json").unlink()
+            with redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(eval_replay.main([str(run_dir), "--output-dir", str(root / "legacy")]), 2)
+
+    def run_scripted(self, root, alias, fixture_id, mandala, turns, sessions):
+        """Run eval_live.run_case for real with scripted agent turns: each turn is (exit_code, timed_out, commands, mutation)."""
+        package = root / "package"
+        package.mkdir()
+        (package / "SKILL.md").write_text("fake", encoding="utf-8")
+        counter = {"turn": 0}
+
+        def agent_turn(argv, prompt, project, env, timeout):
+            counter["turn"] += 1
+            code, timed_out, commands, mutation = turns[counter["turn"] - 1]
+            if mutation:
+                mandala.run(mutation)
+            events = [{"turn": counter["turn"], "actor": "agent", "kind": "command", "command": command.format(project=project), "exit_code": exit_code, "output": output}
+                      for command, exit_code, output in commands]
+            return code, "".join(json.dumps(event) + "\n" for event in events), "stderr for the turn", timed_out
+
+        fixture = next(case for case in json.loads((ROOT / "tests" / "evals" / "cases.json").read_text(encoding="utf-8")) if case["id"] == fixture_id)
+        case_dir = root / "run" / "codex" / "cases" / alias
+        with mock.patch.object(eval_live, "GENERATED", package), mock.patch.object(eval_live, "run_process", agent_turn), \
+                mock.patch.object(cases, "Evaluator", fake_evaluator(mandala)):
+            result = eval_live.run_case(alias, {"fixture": fixture_id, "grader": fixture_id}, fixture, ScriptedAdapter(sessions), {}, case_dir, 5, None)
+        evidence = json.loads((case_dir / "evidence.json").read_text(encoding="utf-8"))
+        text = (case_dir / "evidence.json").read_text(encoding="utf-8")
+        for forbidden in ("fake-session", "session", str(root), "stderr for the turn", "mandala --project", "Added r8.c8"):
+            self.assertNotIn(forbidden, text)
+        return result, evidence
+
+    def test_evidence_is_written_on_every_exit_path(self):
+        gaps = ("mandala --project {project} gaps --required --json", 1, '{"gaps":[{"id":"late-check","required":true}]}')
+        ok = (0, False, [], None)
+        scenarios = {  # label: (turns, sessions, mandala options, status, error category, turns_completed, filled after_turn slots)
+            "turn1-timeout": ([(None, True, [], None), ok], ["s1", "s1"], {}, "ENVIRONMENT_ERROR", "timeout", 0, []),
+            "turn1-agent-error": ([(1, False, [], None), ok], ["s1", "s1"], {}, "ENVIRONMENT_ERROR", "agent", 0, []),
+            "turn1-missing-session": ([ok, ok], [None, None], {}, "UNSUPPORTED", "unsupported", 0, []),
+            "turn2-timeout": ([ok, (None, True, [], None)], ["s1", "s1"], {}, "ENVIRONMENT_ERROR", "timeout", 1, ["1"]),
+            "turn2-session-mismatch": ([ok, ok], ["s1", "s2"], {}, "UNSUPPORTED", "unsupported", 1, ["1"]),
+            "between-turn-failure": ([ok, ok], ["s1", "s1"], {"fail_add": ["late-check"]}, "ENVIRONMENT_ERROR", "setup", 1, ["1"]),
+            "completed": ([ok, (0, False, [gaps], None)], ["s1", "s1"], {}, "AUTO_PASS", None, 2, ["1", "2"]),
+        }
+        for label, (turns, sessions, options, status, category, completed, filled) in scenarios.items():
+            with self.subTest(label), tempfile.TemporaryDirectory() as directory:
+                result, evidence = self.run_scripted(Path(directory), "C2", "completion-state-changed", FakeMandala(title_size=0, **options), turns, sessions)
+                self.assertEqual(result["status"], status)
+                self.assertEqual((result["error"] or {}).get("category"), category)
+                self.assertEqual((evidence["turns_expected"], evidence["turns_completed"], result["turns_completed"]), (2, completed, completed))
+                self.assertTrue(evidence["before"]["present"])
+                self.assertEqual(sorted(evidence["after_turn"]), ["1", "2"])
+                self.assertEqual(sorted(key for key, value in evidence["after_turn"].items() if value is not None), filled)
+        with tempfile.TemporaryDirectory() as directory:
+            show = ("true || mandala --project {project} show --json", 0, "{}")
+            add = ("mandala --project {project} add r8.c8", 0, "added")
+            result, evidence = self.run_scripted(Path(directory), "B5", "capacity-final-child", FakeMandala(title_size=0),
+                                                 [(0, False, [show, add], ("add", "r8.c8"))], ["s1"])
+            self.assertEqual(result["status"], "INCONCLUSIVE")
+            self.assertEqual((evidence["turns_completed"], len(evidence["after_turn"]["1"]["state"]["cells"])), (1, 72))
+
+    def test_setup_failure_writes_partial_evidence_without_inventing_turns(self):
+        with tempfile.TemporaryDirectory() as directory:
+            result, run_dir = self.run_b5(Path(directory), FakeMandala(fail_init=True))
+            self.assertEqual(result["status"], "ENVIRONMENT_ERROR")
+            evidence = json.loads((run_dir / "cases" / "B5" / "evidence.json").read_text(encoding="utf-8"))
+            self.assertEqual((evidence["before"], evidence["after_turn"], evidence["turns_completed"], evidence["turns_expected"]), (None, {"1": None}, 0, 1))
+
+    def test_live_run_writes_rich_coverage_alongside_legacy_summary_field(self):
+        with tempfile.TemporaryDirectory() as directory:
+            _, run_dir = self.run_b5(Path(directory), FakeMandala(title_size=0))
+            self.assertTrue(eval_live.write_rich_coverage(run_dir))
+            coverage = json.loads((run_dir / "coverage.json").read_text(encoding="utf-8"))
+            summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+            self.assertIn("contract_coverage", summary)
+            self.assertEqual(set(summary["contract_coverage"]), {"exercised", "automatically_checked", "manual_review", "not_exercised"})
+            self.assertEqual(next(row for row in coverage["contracts"] if row["id"] == "CAP-002")["coverage_state"], "AUTOMATED_OBSERVED")
+            self.assertTrue((run_dir / "coverage.md").is_file())
 
 
 if __name__ == "__main__":

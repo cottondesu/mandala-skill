@@ -59,6 +59,16 @@ python3 scripts/eval_live.py --agent claude --preflight
 python3 scripts/eval_live.py --agent claude --case R1
 ```
 
+記録済みの実行結果は、agent・Mandala CLI・ネットワークなしでオフライン確認できます。replay は記録済みの証拠を現在の決定的 grader で再判定します（agent や Mandala CLI を再実行せず、最終回答の文面も再判定しません）。coverage レポートは、fixture が宣言した範囲と、実際に観測された自動検査の証拠、手動確認の要求を区別します。sanitizer は whitelist 方式で情報を減らした共有用 bundle を作ります。secret scanner ではないため、共有前に必ず内容を確認してください。この bundle は replay できません。詳しくは[オフライン評価ツール](tests/README.ja.md#オフライン評価ツール)を参照してください。
+
+```sh
+python3 scripts/eval_replay.py .eval-live/<run>/<agent> --case B5
+python3 scripts/eval_coverage.py .eval-live/<run>/<agent>
+python3 scripts/eval_sanitize.py \
+  .eval-live/<run>/<agent> \
+  --output-dir .eval-live/exports/example
+```
+
 ## ライセンス
 
 MIT。[LICENSE](LICENSE) を参照してください。

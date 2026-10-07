@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.1 (unreleased)
+
+- Add offline replay/re-grade for recorded live-evaluation evidence, including compatible reconstruction of v0.2.0 snapshots.
+- Add detailed safety-contract coverage reports that distinguish declared scope, observed automated evidence, unobservable checks, and manual-review requirements.
+- Add privacy-reduced share bundles and a sanitized real-world release/version-contract tracking example.
+
 ## v0.2.0 (2026-10-07)
 
 - Assign stable IDs to the 23 safety contracts and use them throughout behavioral fixture coverage.

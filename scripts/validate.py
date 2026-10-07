@@ -33,6 +33,9 @@ LINK = re.compile(r"(?<!!)\[[^]]+\]\(([^)]+)\)")
 FENCE_OPEN = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
 LOCAL_PATH = re.compile(rb"(?:/(?:Users|home)/[^\s`'\"<>/]+/|[A-Za-z]:[\\/]+Users[\\/]+[^\s`'\"<>\\/]+[\\/])")
 CONTRACTS_PATH: Final = ROOT / "tests" / "evals" / "contracts.json"
+FIELD_USAGE_PATH: Final = ROOT / "tests" / "fixtures" / "field_usage" / "version_contracts.json"
+FIELD_USAGE_TYPE: Final = "mandala-field-usage-example"
+FIELD_USAGE_SOURCE: Final = "sanitized-real-world-usage"
 CONTRACT_COUNT: Final = 23
 CONTRACT_ID: Final = re.compile(r"[A-Z]+-[0-9]{3}")
 CONTRACT_AREAS: Final = {"authorization", "state", "clean", "cli", "completion", "capacity", "verification"}
@@ -259,6 +262,38 @@ def validate_documentation(root: Path) -> None:
             raise ValueError(f"manual evaluation guide omits a capacity-workaround scenario: {name}")
 
 
+def _nonempty(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
+
+
+def validate_field_usage_example(example: object) -> None:
+    """Task-level coverage example (task_contracts); deliberately separate from the 23 Skill safety contracts."""
+    if not isinstance(example, dict) or example.get("schema_version") != 1:
+        raise ValueError("field usage example needs schema_version 1")
+    if example.get("artifact_type") != FIELD_USAGE_TYPE:
+        raise ValueError(f"field usage example needs artifact_type {FIELD_USAGE_TYPE}")
+    if "contracts" in example:
+        raise ValueError("field usage example must use task_contracts, not contracts (safety contracts live in tests/evals/contracts.json)")
+    if example.get("source") != FIELD_USAGE_SOURCE:
+        raise ValueError(f"field usage example source must be {FIELD_USAGE_SOURCE}")
+    if not _nonempty(example.get("id")) or not _nonempty(example.get("goal")):
+        raise ValueError("field usage example needs a non-empty id and goal")
+    task_contracts = example.get("task_contracts")
+    if not isinstance(task_contracts, list) or not task_contracts:
+        raise ValueError("field usage example needs a non-empty task_contracts list")
+    ids = set()
+    for item in task_contracts:
+        if not isinstance(item, dict) or not all(_nonempty(item.get(field)) for field in ("id", "label", "value")):
+            raise ValueError(f"invalid task contract: {item!r:.80}")
+        if set(item) - {"id", "label", "value", "verification"}:
+            raise ValueError(f"unknown task contract field: {item['id']}")
+        if "verification" in item and (not isinstance(item["verification"], list) or not item["verification"] or not all(_nonempty(step) for step in item["verification"])):
+            raise ValueError(f"task contract verification must be a non-empty string list: {item['id']}")
+        if item["id"] in ids:
+            raise ValueError(f"duplicate task contract ID: {item['id']}")
+        ids.add(item["id"])
+
+
 def frontmatter(skill: str) -> dict[str, str]:
     lines = skill.splitlines()
     if not lines or lines[0] != "---":
@@ -388,11 +423,12 @@ def main() -> None:
     validate_live_suites(manifest, cases)
     activation = json.loads((ROOT / "tests" / "evals" / "activation.json").read_text(encoding="utf-8"))
     validate_activation_metadata(activation)
+    validate_field_usage_example(json.loads(FIELD_USAGE_PATH.read_text(encoding="utf-8")))
     validate_documentation(ROOT)
     print(
         f"Mandala Skill packages valid and current; {len(SAFETY_CONTRACTS)} safety contracts, "
-        f"{len(cases)} behavioral fixtures, {len(manifest['cases'])} live cases, and "
-        f"{len(activation)} activation-routing fixtures validated; live agents are not run"
+        f"{len(cases)} behavioral fixtures, {len(manifest['cases'])} live cases, "
+        f"{len(activation)} activation-routing fixtures, and 1 task-level field usage example validated; live agents are not run"
     )
 
 

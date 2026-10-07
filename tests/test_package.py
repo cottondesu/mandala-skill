@@ -323,6 +323,66 @@ class PackageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "missing manual evaluation scenarios"):
             validate.validate_eval_metadata([case for case in cases if case["id"] != "completion-state-changed"])
 
+    def test_field_usage_version_contracts_example(self):
+        example = json.loads(validate.FIELD_USAGE_PATH.read_text(encoding="utf-8"))
+        validate.validate_field_usage_example(example)
+        self.assertEqual((example["artifact_type"], example["source"], example["goal"]), ("mandala-field-usage-example", "sanitized-real-world-usage", "Verify release version contracts"))
+        self.assertNotIn("contracts", example)
+        self.assertIn("task_contracts", example)
+        facts = {item["label"]: (item["value"], item.get("verification")) for item in example["task_contracts"]}
+        self.assertEqual(facts, {
+            "Gem": ("0.3.0", None), "CLI": ("0.3.0", None), "JSON schema": ("3", ["success-path", "failure-path"]),
+            "config schema": ("1", ["version-2-rejected"]), "Ruby": (">= 3.3", None), "Prism": (">= 1.9, < 2", None), "dependencies added": ("none", None),
+        })
+
+    def test_field_usage_example_is_separate_from_safety_evaluation(self):
+        example = json.loads(validate.FIELD_USAGE_PATH.read_text(encoding="utf-8"))
+        task_ids = {item["id"] for item in example["task_contracts"]}
+        contracts = validate.load_contracts()
+        self.assertEqual(len(contracts), 23)
+        self.assertFalse(task_ids & set(contracts))
+        cases = json.loads((ROOT / "tests" / "evals" / "cases.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(cases), 23)
+        self.assertNotIn(example["id"], {case["id"] for case in cases})
+        self.assertEqual(len(json.loads((ROOT / "tests" / "evals" / "activation.json").read_text(encoding="utf-8"))), 11)
+        manifest = json.loads((ROOT / "tests" / "evals" / "live_suites.json").read_text(encoding="utf-8"))
+        self.assertEqual(len(manifest["cases"]), 8)
+        self.assertEqual(len(manifest["suites"]["release"]), 8)
+        self.assertNotIn(example["id"], {entry["fixture"] for entry in manifest["cases"].values()})
+        for name in ("contracts.json", "cases.json", "live_suites.json", "activation.json"):
+            self.assertNotIn("version_contracts", (ROOT / "tests" / "evals" / name).read_text(encoding="utf-8"))
+            self.assertNotIn("release-version-contracts", (ROOT / "tests" / "evals" / name).read_text(encoding="utf-8"))
+        # Coverage rows come only from the safety catalog; task contract IDs never appear there.
+        from scripts import eval_coverage, live_eval_artifacts
+        from tests import eval_artifact_fixtures as fx
+        with tempfile.TemporaryDirectory() as directory:
+            fx.write_run(Path(directory) / "codex", [fx.b5_case()])
+            coverage = eval_coverage.build_coverage(live_eval_artifacts.Source(str(Path(directory) / "codex")))
+        self.assertEqual({row["id"] for row in coverage["contracts"]}, set(contracts))
+        self.assertFalse(task_ids & {row["id"] for row in coverage["contracts"]})
+
+    def test_field_usage_example_validation_rejects_invalid_shapes(self):
+        example = json.loads(validate.FIELD_USAGE_PATH.read_text(encoding="utf-8"))
+        items = example["task_contracts"]
+        bad = [
+            ({**example, "schema_version": 2}, "schema_version 1"),
+            ({**example, "artifact_type": "mandala-field-usage"}, "artifact_type"),
+            ({**example, "id": " "}, "non-empty id"),
+            ({**example, "source": "real-world"}, "source must be"),
+            ({**example, "goal": ""}, "non-empty id and goal"),
+            ({**example, "task_contracts": []}, "non-empty task_contracts"),
+            ({**example, "contracts": items}, "task_contracts, not contracts"),
+            ({**example, "task_contracts": items + [items[0]]}, "duplicate task contract ID"),
+            ({**example, "task_contracts": [{**items[0], "label": ""}]}, "invalid task contract"),
+            ({**example, "task_contracts": [{**items[0], "value": ""}]}, "invalid task contract"),
+            ({**example, "task_contracts": [{**items[0], "verification": []}]}, "non-empty string list"),
+            ({**example, "task_contracts": [{**items[0], "verification": ["ok", 3]}]}, "non-empty string list"),
+            ({**example, "task_contracts": [{**items[0], "verification": "success-path"}]}, "non-empty string list"),
+        ]
+        for value, message in bad:
+            with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
+                validate.validate_field_usage_example(value)
+
     def test_ci_permissions_are_read_only(self):
         workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
         self.assertIn("permissions:\n  contents: read", workflow)
