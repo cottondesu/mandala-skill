@@ -20,6 +20,8 @@ PACKAGES = (ROOT / "src" / "mandala", ROOT / "dist" / "mandala")
 EXPECTED = {Path("SKILL.md"), Path("references/cli-contract.md")}
 SKILL_NAME: Final = "mandala"
 # Agent Skills specification: name and description metadata constraints.
+# Repository context-size proxy for the canonical Skill (v0.2.1 size); not a tokenizer-specific token budget.
+SKILL_BYTE_BUDGET: Final = 6214
 NAME_MAX: Final = 64
 DESCRIPTION_MAX: Final = 1024
 SKILL_NAME_PATTERN: Final = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
@@ -52,10 +54,12 @@ LIVE_CASES: Final = {
     "R1": "reset-request", "R2": "explicit-clean", "M1": "contextual-update",
     "C1": "zero-gaps", "C2": "completion-state-changed",
     "B4": "capacity-full-child", "B5": "capacity-final-child", "B6": "capacity-full-tree",
+    "A1": "generic-gap-analysis", "A2": "explicit-non-use-manual", "R3": "reset-invalid-state", "P1": "missing-cli-manual",
 }
 LIVE_SUITES: Final = {
     "focused": ("R1", "R2", "M1", "C1", "C2"),
     "capacity": ("B4", "B5", "B6"),
+    "boundaries": ("A1", "A2", "R3", "P1"),
 }
 CLI_BASELINE: Final = "Mandala CLI v0.3.0"
 CLI_CHECK: Final = "mandala --version"
@@ -197,7 +201,7 @@ def validate_eval_metadata(cases: list[dict], contracts: dict[str, dict[str, str
         raise ValueError(f"eval contract coverage incomplete: {sorted(set(contracts) - covered)}")
 
 
-def validate_live_suites(manifest: object, cases: list[dict], graders: object = GRADERS) -> dict:
+def validate_live_suites(manifest: object, cases: list[dict], graders: object = GRADERS, contracts: dict[str, dict[str, str]] = SAFETY_CONTRACTS) -> dict:
     """Validate the live-eval manifest against behavioral fixtures; prompts stay in cases.json."""
     if not isinstance(manifest, dict) or manifest.get("schema_version") != 1 or set(manifest) != {"schema_version", "cases", "suites"}:
         raise ValueError("live suite manifest needs schema_version 1, cases, and suites")
@@ -231,7 +235,12 @@ def validate_live_suites(manifest: object, cases: list[dict], graders: object = 
     release = set(suites.get("release", ()))
     union = {alias for name in LIVE_SUITES for alias in suites[name]}
     if release != union:
-        raise ValueError(f"live suite release must be the union of focused and capacity; missing {sorted(union - release)}")
+        raise ValueError(f"live suite release must be the union of {', '.join(LIVE_SUITES)}; missing {sorted(union - release)}")
+    # Declared scope only: every safety contract appears in some release fixture's `contracts`; this is not verification.
+    fixtures = {case["id"]: case for case in cases}
+    declared = {cid for alias in release for cid in fixtures[live_cases[alias]["fixture"]]["contracts"]}
+    if declared != set(contracts):
+        raise ValueError(f"release suite fixture scope must declare every safety contract; missing {sorted(set(contracts) - declared)}")
     return manifest
 
 
@@ -260,6 +269,8 @@ def validate_documentation(root: Path) -> None:
             raise ValueError(f"manual evaluation guide omits a focused freshness scenario: {name}")
         if not all(re.search(rf"^\| {scenario} \|", guide, re.MULTILINE) for scenario in ("B4", "B6", "B5")):
             raise ValueError(f"manual evaluation guide omits a capacity-workaround scenario: {name}")
+        if not all(re.search(rf"^\| `{scenario}` \|", guide, re.MULTILINE) for scenario in LIVE_CASES):
+            raise ValueError(f"live evaluation guide omits a live case: {name}")
 
 
 def _nonempty(value: object) -> bool:
@@ -292,6 +303,12 @@ def validate_field_usage_example(example: object) -> None:
         if item["id"] in ids:
             raise ValueError(f"duplicate task contract ID: {item['id']}")
         ids.add(item["id"])
+
+
+def validate_skill_budget(content: bytes, name: str, budget: int = SKILL_BYTE_BUDGET) -> None:
+    """Deterministic context-size proxy: the canonical Skill may not grow past its v0.2.1 UTF-8 size."""
+    if len(content) > budget:
+        raise ValueError(f"SKILL.md is {len(content)} UTF-8 bytes, over the {budget}-byte budget: {name}")
 
 
 def frontmatter(skill: str) -> dict[str, str]:
@@ -401,6 +418,7 @@ def package_files(package: Path, root: Path = ROOT) -> dict[Path, bytes]:
     # Repository policy, following the Agent Skills recommendation to keep SKILL.md short.
     if len(skill.splitlines()) >= 500:
         raise ValueError(f"SKILL.md must be under 500 lines: {package}")
+    validate_skill_budget(files[Path("SKILL.md")], str(package / "SKILL.md"))
     validate_safety_contract(skill)
     validate_cli_baseline(skill, str(package / "SKILL.md"))
     validate_cli_baseline(files[Path("references/cli-contract.md")].decode("utf-8"), str(package / "references/cli-contract.md"))

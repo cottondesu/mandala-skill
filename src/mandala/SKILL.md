@@ -5,7 +5,7 @@ description: Use Mandala CLI for coverage gaps and state updates in explicit Man
 
 # Mandala coverage tracking
 
-Mandala records declared coverage; it does not plan, generate cells, inspect work, or verify evidence. Decomposition is your reasoning. Read [the CLI contract](references/cli-contract.md) for syntax, limits, discovery, and exit codes before operating on a project.
+Mandala records declared coverage; it does not plan, generate cells, inspect work, or verify evidence. Decomposition is your reasoning. Read [the CLI contract](references/cli-contract.md) for syntax, limits, discovery, and exit codes before operating.
 
 ## Authorization and setup
 
@@ -17,7 +17,7 @@ Confirm the project root; target it with `mandala --project <project-root> <comm
 
 ## Mutating state safely
 
-Before the first Mandala mutation in each new user turn, run `mandala --project <project-root> show --json` and inspect the current state. A state inspection from an earlier turn does not satisfy this requirement. Prefer JSON inspection. One fresh inspection may cover tightly coupled mutations in this turn when no external change is expected; refresh if state may have changed externally. Preserve an existing goal and cells. If the goal belongs to another task or state is invalid or uncertain, stop mutations and resolve with the user. Treat exit `2` as an error; initialize only when tracking is authorized and state is genuinely absent.
+Before the first Mandala mutation in each new user turn, run `mandala --project <project-root> show --json` and inspect the current state. A state inspection from an earlier turn does not satisfy this requirement. Prefer JSON inspection. One fresh inspection may cover tightly coupled mutations in this turn; refresh if state may have changed externally. Preserve an existing goal and cells. If the goal belongs to another task or state is invalid or uncertain, stop mutations and resolve with the user. Treat exit `2` as an error; initialize only when tracking is authorized and state is genuinely absent.
 
 A request to reset, reinitialize, or start Mandala over does not by itself authorize `clean` or deletion of existing state. For such requests, run `show --json` first. If valid state exists, preserve it without `clean` or `init`, explain that reinitialization requires deleting existing state, and ask for a separate explicit destructive request before deletion. A backup does not authorize deletion. If state is invalid or corrupt, report the problem without automatically deleting or repairing it.
 
@@ -31,7 +31,7 @@ Use a small, meaningful, task-specific decomposition; consider whether roughly 2
 
 Mark `done` only for actual completion or the user's explicit completion declaration. Normally keep work with required checks `open` until work and checks finish; planned, considered, mentioned, or started work stays `open`. Mark `na` only with project evidence or a clear user constraint showing non-applicability. Never use `na` merely to eliminate a gap. Reopen with `mark <id> open` when new evidence changes either declaration. `done` and `na` are declarations, not evidence verification.
 
-`done` and `na` do not free structural capacity; resolved and optional cells still count toward root, child, and total-cell limits. Never propose or perform status changes to existing cells (`done` or `na`), `clean` or reinitialization, or removal or replacement of unrelated declared coverage merely to make room for another cell. When no legal slot is available for the requested cell, report the structural limit, preserve existing state, and ask the user for clear direction before restructuring declared coverage.
+`done` and `na` do not free structural capacity; resolved and optional cells still count toward root, child, and total-cell limits. Never propose or perform status changes to existing cells (`done` or `na`), `clean` or reinitialization, or removal or replacement of unrelated declared coverage merely to make room for another cell. When no legal slot is available for the requested cell, report the structural limit, preserve existing state, and ask the user for clear direction before restructuring declared coverage. Tell the user status changes do not create capacity.
 
 ## Completion
 
@@ -39,4 +39,4 @@ For active Mandala tracking, run `mandala --project <project-root> gaps --requir
 
 Exit `1` from `status` or `gaps` means unresolved required gaps, not a crash. On `1`, report remaining required gaps without claiming coverage complete; never mark a legitimate gap `na` to pass. On `0`, confirm JSON has no required gaps. Exit `2`, any other exit, or invalid JSON is an error: report it without a completion judgment or fallback to old results.
 
-Zero required gaps means **only that currently declared required leaf cells are resolved**. It does not prove comprehensive decomposition, exhaustive analysis, task completion, implementation correctness, or verified evidence; an empty plan also has zero gaps. Mandala gap status is separate from test results, behavior verification, and task-specific inspection. Keep state after zero gaps. Briefly report initialization/updates, cells marked `done`/`na`, required gaps and relevant optional gaps; when required gaps are zero, say “No declared required gaps remain.”
+Zero required gaps means **only that currently declared required leaf cells are resolved**. It does not prove comprehensive decomposition, exhaustive analysis, task completion, implementation correctness, or verified evidence; an empty plan also has zero gaps. Mandala gap status is separate from test results, behavior verification, and task-specific inspection. Keep state after zero gaps. Briefly report `init`/updates, cells marked `done`/`na`, required gaps and relevant optional gaps; when required gaps are zero, say “No declared required gaps remain.”

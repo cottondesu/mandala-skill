@@ -183,6 +183,8 @@ def run_case(alias: str, entry: dict, fixture: dict, adapter, env: Dict[str, str
             raise RuntimeError("disposable project overlaps the repository")
         shutil.copytree(str(GENERATED), str(adapter.skill_dir(project)))
         evaluator = cases_mod.Evaluator(project, env, recorder.record)
+        # Optional case hook (P1): the agent alone gets a modified environment; the evaluator keeps `env`.
+        agent_env = grader["agent_env"](env, Path(os.path.realpath(workspace))) if grader.get("agent_env") else env
         try:
             grader["setup"](evaluator)
             result["setup"] = {"status": "ok", "commands": sum(1 for event in recorder.events if event["actor"] == "evaluator")}
@@ -192,7 +194,7 @@ def run_case(alias: str, entry: dict, fixture: dict, adapter, env: Dict[str, str
             return finish()
         session_id = None
         for number, prompt in enumerate(prompts, start=1):
-            code, stdout, stderr, timed_out = run_process(adapter.turn_argv(project, session_id), prompt, project, env, timeout)
+            code, stdout, stderr, timed_out = run_process(adapter.turn_argv(project, session_id), prompt, project, agent_env, timeout)
             raw_name = f"raw-turn{number}.jsonl"
             (case_dir / raw_name).write_text(stdout, encoding="utf-8")
             result["artifacts"]["raw"].append(raw_name)

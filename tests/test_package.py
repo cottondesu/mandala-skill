@@ -178,7 +178,9 @@ class PackageTests(unittest.TestCase):
         cases = json.loads((ROOT / "tests" / "evals" / "cases.json").read_text(encoding="utf-8"))
         manifest = json.loads((ROOT / "tests" / "evals" / "live_suites.json").read_text(encoding="utf-8"))
         validate.validate_live_suites(manifest, cases)
-        self.assertEqual(manifest["suites"]["release"], ["R1", "R2", "M1", "C1", "C2", "B4", "B5", "B6"])
+        self.assertEqual(manifest["suites"]["release"], ["R1", "R2", "M1", "C1", "C2", "B4", "B5", "B6", "A1", "A2", "R3", "P1"])
+        self.assertEqual({name: len(members) for name, members in manifest["suites"].items()}, {"focused": 5, "capacity": 3, "boundaries": 4, "release": 12})
+        self.assertEqual(len(manifest["cases"]), 12)
         def changed(**updates):
             result = json.loads(json.dumps(manifest))
             for path, value in updates.items():
@@ -191,14 +193,69 @@ class PackageTests(unittest.TestCase):
             (changed(cases__R1={"fixture": "reset-request", "grader": "reset-request", "prompt": "copied"}), "invalid live case entry"),
             (changed(cases__R1={"fixture": "explicit-clean", "grader": "explicit-clean"}), "live case R1 must use fixture reset-request"),
             (changed(suites__focused=["R1", "R1", "R2", "M1", "C1", "C2"]), "duplicate live alias in suite"),
-            (changed(suites__release=["R1", "R2", "M1", "C1", "C2", "B4", "B5"]), r"missing \['B6'\]"),
+            (changed(suites__release=["R1", "R2", "M1", "C1", "C2", "B4", "B5", "A1", "A2", "R3", "P1"]), r"missing \['B6'\]"),
             (changed(suites__capacity=["B4", "B5"]), "live suite capacity must contain"),
             (changed(suites__extra=["Z9"]), "unknown live alias"),
+            (changed(suites__boundaries=["A1", "A2", "R3"]), "live suite boundaries must contain"),
+            (changed(cases__P1={"fixture": "reset-invalid-state", "grader": "reset-invalid-state"}), "live case P1 must use fixture missing-cli-manual"),
+            (changed(suites__release=["R1", "R2", "M1", "C1", "C2", "B4", "B5", "B6", "A1", "A2", "R3"]), r"missing \['P1'\]"),
+            (changed(cases__A1={"fixture": "generic-gap-analysis", "grader": "generic-gap-analysis", "skill_load_required": False}), "invalid live case entry"),
+            (changed(cases__a1={"fixture": "generic-gap-analysis", "grader": "generic-gap-analysis"}), "invalid live case alias"),
         )
         for manifest_change, message in invalid:
             with self.subTest(message=message):
                 with self.assertRaisesRegex(ValueError, message):
                     validate.validate_live_suites(manifest_change, cases)
+
+    def test_release_suite_declares_every_safety_contract(self):
+        cases = json.loads((ROOT / "tests" / "evals" / "cases.json").read_text(encoding="utf-8"))
+        manifest = json.loads((ROOT / "tests" / "evals" / "live_suites.json").read_text(encoding="utf-8"))
+        fixtures = {case["id"]: case for case in cases}
+        declared = {cid for alias in manifest["suites"]["release"] for cid in fixtures[manifest["cases"][alias]["fixture"]]["contracts"]}
+        self.assertEqual(declared, set(validate.load_contracts()))
+        self.assertIn("AUTH-001", fixtures["contextual-update"]["contracts"])
+        self.assertIn("COMP-004", fixtures["completion-state-changed"]["contracts"])
+        for fixture_id, contract in (("contextual-update", "AUTH-001"), ("completion-state-changed", "COMP-004")):
+            with self.subTest(removed=contract):
+                changed = [{**case, "contracts": [cid for cid in case["contracts"] if cid != contract]} if case["id"] == fixture_id else case for case in cases]
+                with self.assertRaisesRegex(ValueError, rf"must declare every safety contract; missing \['{contract}'\]"):
+                    validate.validate_live_suites(manifest, changed)
+        missing_cli = fixtures["missing-cli-manual"]["expected"]
+        self.assertIn("Do not auto-install or download Mandala", missing_cli)
+        self.assertIn("Point to installation guidance", missing_cli)
+
+    def test_skill_byte_budget(self):
+        self.assertEqual(validate.SKILL_BYTE_BUDGET, 6214)
+        for package in (SOURCE, GENERATED):
+            self.assertLessEqual(len((package / "SKILL.md").read_bytes()), validate.SKILL_BYTE_BUDGET)
+        validate.validate_safety_contract((SOURCE / "SKILL.md").read_text(encoding="utf-8"))
+        skill = (SOURCE / "SKILL.md").read_text(encoding="utf-8")
+        padding = "x" * (validate.SKILL_BYTE_BUDGET - len(skill.encode("utf-8")) + 1)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            package = root / "src" / "mandala"
+            shutil.copytree(SOURCE, package)
+            (package / "SKILL.md").write_text(skill + padding, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "over the 6214-byte budget"):
+                validate.package_files(package, root)
+            (package / "SKILL.md").write_text(skill + padding[1:], encoding="utf-8")  # exactly at the budget
+            self.assertEqual(len((package / "SKILL.md").read_bytes()), validate.SKILL_BYTE_BUDGET)
+            validate.package_files(package, root)
+            generated = root / "dist" / "mandala"
+            shutil.copytree(SOURCE, generated)
+            (generated / "SKILL.md").write_text(skill + padding, encoding="utf-8")
+            self.assertEqual(len((generated / "SKILL.md").read_bytes()), validate.SKILL_BYTE_BUDGET + 1)
+            with self.assertRaisesRegex(ValueError, "over the 6214-byte budget"):
+                validate.package_files(generated, root)
+        multibyte = "あ" * (validate.SKILL_BYTE_BUDGET // 3 + 1)  # bytes, not characters, are counted
+        with self.assertRaisesRegex(ValueError, "UTF-8 bytes"):
+            validate.validate_skill_budget(multibyte.encode("utf-8"), "fixture")
+
+    def test_capacity_response_hardening_is_in_the_capacity_section(self):
+        skill = validate.active_instruction_text((SOURCE / "SKILL.md").read_text(encoding="utf-8"))
+        capacity = next(paragraph for paragraph in skill.split("\n\n") if validate.SAFETY_CONTRACT["CAP-005"] in paragraph)
+        self.assertIn("Tell the user status changes do not create capacity.", capacity)
+        self.assertNotIn("CAP-006", json.dumps(validate.load_contracts()))
 
     def test_safety_contract_and_removed_clause_regressions(self):
         skill = (SOURCE / "SKILL.md").read_text(encoding="utf-8")
@@ -346,8 +403,8 @@ class PackageTests(unittest.TestCase):
         self.assertNotIn(example["id"], {case["id"] for case in cases})
         self.assertEqual(len(json.loads((ROOT / "tests" / "evals" / "activation.json").read_text(encoding="utf-8"))), 11)
         manifest = json.loads((ROOT / "tests" / "evals" / "live_suites.json").read_text(encoding="utf-8"))
-        self.assertEqual(len(manifest["cases"]), 8)
-        self.assertEqual(len(manifest["suites"]["release"]), 8)
+        self.assertEqual(len(manifest["cases"]), 12)
+        self.assertEqual(len(manifest["suites"]["release"]), 12)
         self.assertNotIn(example["id"], {entry["fixture"] for entry in manifest["cases"].values()})
         for name in ("contracts.json", "cases.json", "live_suites.json", "activation.json"):
             self.assertNotIn("version_contracts", (ROOT / "tests" / "evals" / name).read_text(encoding="utf-8"))
@@ -464,7 +521,14 @@ class PackageTests(unittest.TestCase):
                 root = Path(directory)
                 package = root / "src" / "mandala"
                 shutil.copytree(SOURCE, package)
-                (package / "SKILL.md").write_text((package / "SKILL.md").read_text(encoding="utf-8") + "\n" + generic_path + "\n", encoding="utf-8")
+                # SKILL.md: substitute the path into non-contract prose so the copy stays within the byte budget.
+                skill = (package / "SKILL.md").read_text(encoding="utf-8")
+                target = "`mandala --project <project-root> <command>`"
+                self.assertEqual(skill.count(target), 1)
+                (package / "SKILL.md").write_text(skill.replace(target, f"`mandala --project {generic_path} <command>`"), encoding="utf-8")
+                reference = package / "references" / "cli-contract.md"
+                reference.write_text(reference.read_text(encoding="utf-8") + "\n" + generic_path + "\n", encoding="utf-8")
+                self.assertIn(generic_path, (package / "SKILL.md").read_text(encoding="utf-8"))
                 validate.package_files(package, root)
 
 

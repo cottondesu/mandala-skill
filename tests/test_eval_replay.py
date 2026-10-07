@@ -351,6 +351,55 @@ class ProvenanceTests(ReplayTestCase):
         self.assertEqual(fx.tree_digest(source), before)
 
 
+class BoundaryReplayTests(ReplayTestCase):
+    """v0.3.0 boundary cases re-grade from the same events + snapshots model, offline."""
+
+    def test_boundary_cases_replay_offline(self):
+        for evidence in (True, False):
+            with self.subTest(evidence=evidence):
+                source = self.run_dir([fx.a1_case(), fx.a2_case(), fx.r3_case(), fx.p1_case()], name=f"boundaries-{evidence}", evidence=evidence)
+                before = fx.tree_digest(source)
+                empty = self.root / f"empty-bin-{evidence}"
+                empty.mkdir()
+                with fx.no_agent_or_mandala_execution(), mock.patch.dict(os.environ, {"PATH": str(empty)}):
+                    code, output = self.replay(source, name=f"out-{evidence}")
+                self.assertEqual(code, 0, replay.last_error)
+                for alias in ("A1", "A2", "R3", "P1"):
+                    record = case_result(output, alias)
+                    self.assertEqual((record["replay_status"], record["graded_status"], record["status_changed"]), ("REPLAYED", "AUTO_PASS", False), alias)
+                    self.assertEqual(record["legacy_snapshot_reconstruction"], not evidence)
+                self.assertEqual(fx.tree_digest(source), before)
+
+    def test_boundary_failures_replay_as_auto_fail(self):
+        r3 = fx.r3_case("AUTO_FAIL")
+        r3.agent(1, f"mandala --project {fx.PLACEHOLDER} clean", 0, "")
+        r3.events = [event for event in r3.events if not (event.get("phase") == "snapshot" and event["turn"] == 1)]
+        r3.snapshot(1, stdout=fx.NO_PROJECT, exit_code=2)
+        p1 = fx.p1_case("AUTO_FAIL")
+        p1.agent(1, "go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0", 1, "")
+        code, output = self.replay(self.run_dir([r3, p1]))
+        self.assertEqual(code, 1)
+        r3_checks = {item["id"]: item["status"] for item in case_result(output, "R3")["checks"]}
+        self.assertEqual((r3_checks["r3.no-mutation"], r3_checks["r3.invalid-state-preserved"]), ("FAIL", "FAIL"))
+        self.assertEqual({item["id"]: item["status"] for item in case_result(output, "P1")["checks"]}["p1.no-install"], "FAIL")
+
+    def test_source_contract_metadata_is_kept_as_provenance(self):
+        old_c2 = fx.c2_case()
+        old_c2.contracts = ["CLI-002", "COMP-001", "COMP-002", "COMP-003"]  # recorded before COMP-004 was declared
+        old_m1 = fx.CaseSpec("M1", "contextual-update", "ENVIRONMENT_ERROR", turns=2)
+        old_m1.contracts = ["STATE-001", "STATE-002"]  # recorded before AUTH-001 was declared
+        self.assertIn("COMP-004", fx.fixture_contracts("completion-state-changed"))
+        self.assertIn("AUTH-001", fx.fixture_contracts("contextual-update"))
+        source = self.run_dir([old_c2, old_m1], evidence=False)
+        code, output = self.replay(source)
+        self.assertEqual(case_result(output, "C2")["contracts"], ["CLI-002", "COMP-001", "COMP-002", "COMP-003"])
+        self.assertEqual(case_result(output, "C2")["graded_status"], "AUTO_PASS")
+        self.assertEqual(case_result(output, "M1")["contracts"], ["STATE-001", "STATE-002"])
+        result = json.loads((source / "cases" / "C2" / "result.json").read_text(encoding="utf-8"))
+        self.assertEqual(result["contracts"], ["CLI-002", "COMP-001", "COMP-002", "COMP-003"])
+        self.assertEqual(code, 2)  # M1 is an environment error and therefore unreplayable
+
+
 class OfflineTests(ReplayTestCase):
     def test_raw_traces_are_not_required(self):
         code, output = self.replay(self.run_dir([fx.b5_case(), fx.c2_case()], raw=False))

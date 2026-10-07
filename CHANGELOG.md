@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.0 (unreleased)
+
+- Harden capacity-limit responses: the Skill now says to tell the user that status changes do not create capacity, without increasing the canonical Skill size (a 6214-byte UTF-8 budget is now validated).
+- Add four boundary live scenarios using existing fixtures: generic gap analysis (A1), explicit non-use (A2), corrupt state on reset (R3), and an agent-side missing CLI (P1).
+- Require the release suite's declared fixture scope to cover all 23 safety contracts; this is declared scope, not automated verification of every contract.
+
 ## v0.2.1 (2026-10-07)
 
 - Add offline replay/re-grade for recorded live-evaluation evidence, including compatible reconstruction of v0.2.0 snapshots.

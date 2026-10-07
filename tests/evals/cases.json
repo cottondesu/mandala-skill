@@ -61,7 +61,7 @@
   },
   {
     "id": "contextual-update",
-    "contracts": ["STATE-001", "STATE-002"],
+    "contracts": ["STATE-001", "STATE-002", "AUTH-001"],
     "setup": "Fresh temporary project with a small authentication design and no Mandala state. Keep the same conversation only across the two turns of this scenario.",
     "turns": [
       {"prompt": "Mandalaを使ってこの設計の抜け漏れを追跡して", "expected": ["Run show --json before init", "Create useful required cells through the CLI"]},
@@ -98,7 +98,7 @@
     "id": "missing-cli-manual",
     "contracts": ["CLI-001", "STATE-003"],
     "prompt": "Use Mandala, but the mandala executable is missing.",
-    "expected": ["Report the missing prerequisite", "Do not create custom .mandala state"]
+    "expected": ["Report the missing prerequisite", "Do not create custom .mandala state", "Do not auto-install or download Mandala", "Point to installation guidance"]
   },
   {
     "id": "explicit-non-use-manual",
@@ -128,7 +128,7 @@
   },
   {
     "id": "completion-state-changed",
-    "contracts": ["COMP-002", "COMP-003", "CLI-002", "COMP-001"],
+    "contracts": ["COMP-002", "COMP-003", "CLI-002", "COMP-001", "COMP-004"],
     "setup": "Fresh temporary project with a genuinely completed tracked task and zero required gaps, created and updated through CLI commands. Keep the same conversation for the two turns.",
     "turns": [
       {"prompt": "Mandalaで追跡中の必須gapを確認して", "expected": ["Observe zero required gaps with gaps --required --json in Turn 1"]},

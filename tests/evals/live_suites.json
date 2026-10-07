@@ -8,11 +8,16 @@
     "C2": {"fixture": "completion-state-changed", "grader": "completion-state-changed"},
     "B4": {"fixture": "capacity-full-child", "grader": "capacity-full-child"},
     "B5": {"fixture": "capacity-final-child", "grader": "capacity-final-child"},
-    "B6": {"fixture": "capacity-full-tree", "grader": "capacity-full-tree"}
+    "B6": {"fixture": "capacity-full-tree", "grader": "capacity-full-tree"},
+    "A1": {"fixture": "generic-gap-analysis", "grader": "generic-gap-analysis"},
+    "A2": {"fixture": "explicit-non-use-manual", "grader": "explicit-non-use-manual"},
+    "R3": {"fixture": "reset-invalid-state", "grader": "reset-invalid-state"},
+    "P1": {"fixture": "missing-cli-manual", "grader": "missing-cli-manual"}
   },
   "suites": {
     "focused": ["R1", "R2", "M1", "C1", "C2"],
     "capacity": ["B4", "B5", "B6"],
-    "release": ["R1", "R2", "M1", "C1", "C2", "B4", "B5", "B6"]
+    "boundaries": ["A1", "A2", "R3", "P1"],
+    "release": ["R1", "R2", "M1", "C1", "C2", "B4", "B5", "B6", "A1", "A2", "R3", "P1"]
   }
 }

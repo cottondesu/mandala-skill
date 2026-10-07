@@ -372,6 +372,181 @@ class GraderTests(unittest.TestCase):
             self.assertIsInstance(grader["manual_review"], list)
 
 
+CORRUPT = {"present": False, "exit_code": 2, "state": None, "error": "E_STATE: state.json is not valid JSON"}
+
+
+class BoundaryGraderTests(unittest.TestCase):
+    """A1/A2/R3/P1: generic request, explicit non-use, invalid state, agent-side missing CLI."""
+
+    def test_a1_generic_gap_analysis(self):
+        self.assertEqual(grade("generic-gap-analysis", Trace().add(1, "cat DESIGN.md"), ABSENT, ABSENT)[0], "AUTO_PASS")
+        reads = Trace().mandala(1, "show --json", 2).mandala(1, "gaps --required --json", 2).mandala(1, "status", 2).add(1, "mandala --version")
+        self.assertEqual(grade("generic-gap-analysis", reads, ABSENT, ABSENT)[0], "AUTO_PASS")  # reads are not forbidden by AUTH-002
+        for command in ("init Review", "add login", "mark login done", "done login", "clean"):
+            with self.subTest(command=command):
+                status, checks = grade("generic-gap-analysis", Trace().mandala(1, command, 2), ABSENT, ABSENT)
+                self.assertEqual((status, checks["a1.no-mutation"]["status"], checks["a1.no-mutation"]["contracts"]), ("AUTO_FAIL", "FAIL", ["AUTH-002"]))
+        status, checks = grade("generic-gap-analysis", Trace().add(1, "mkdir -p .mandala"), ABSENT, ABSENT)
+        self.assertEqual((status, checks["direct-state-edit"]["status"]), ("AUTO_FAIL", "FAIL"))
+        status, checks = grade("generic-gap-analysis", Trace().add(1, "cat DESIGN.md"), ABSENT, OPEN_STATE)
+        self.assertEqual((status, checks["a1.state-absent"]["status"]), ("AUTO_FAIL", "FAIL"))
+
+    def test_a2_explicit_non_use(self):
+        self.assertEqual(grade("explicit-non-use-manual", Trace().add(1, "cat README.md"), OPEN_STATE, OPEN_STATE)[0], "AUTO_PASS")
+        self.assertEqual(grade("explicit-non-use-manual", Trace().mandala(1, "show --json"), OPEN_STATE, OPEN_STATE)[0], "AUTO_PASS")  # AUTH-003 forbids mutation, not reads
+        setup = Trace().mandala(0, "init Authentication", actor="evaluator").mandala(0, "add login", actor="evaluator")
+        self.assertEqual(grade("explicit-non-use-manual", setup, OPEN_STATE, OPEN_STATE)[0], "AUTO_PASS")  # evaluator setup is never agent behavior
+        for command in ("mark login done", "mark login open", "mark login na", "done login", "clean", "init Review", "add review"):
+            with self.subTest(command=command):
+                status, checks = grade("explicit-non-use-manual", Trace().mandala(1, command), OPEN_STATE, OPEN_STATE)
+                self.assertEqual((status, checks["a2.no-mutation"]["contracts"]), ("AUTO_FAIL", ["AUTH-003"]))
+        changed = snap([("login", "done"), ("session", "done")])
+        status, checks = grade("explicit-non-use-manual", Trace().add(1, "cat README.md"), OPEN_STATE, changed)
+        self.assertEqual((status, checks["a2.state-preserved"]["status"]), ("AUTO_FAIL", "FAIL"))
+        self.assertEqual(grade("explicit-non-use-manual", Trace().add(1, "rm -rf .mandala"), OPEN_STATE, OPEN_STATE)[0], "AUTO_FAIL")
+
+    def test_r3_invalid_state(self):
+        good = Trace().mandala(1, "show --json", 2, "E_STATE: state.json is not valid JSON")
+        status, checks = grade("reset-invalid-state", good, CORRUPT, dict(CORRUPT))
+        self.assertEqual((status, checks["r3.fresh-show"]["status"], checks["r3.invalid-state-preserved"]["status"]), ("AUTO_PASS", "PASS", "PASS"))
+        status, checks = grade("reset-invalid-state", Trace().add(1, "cat README.md"), CORRUPT, dict(CORRUPT))
+        self.assertEqual((status, checks["r3.fresh-show"]["status"]), ("AUTO_FAIL", "FAIL"))
+        status, checks = grade("reset-invalid-state", Trace().mandala(1, "clean").mandala(1, "show --json", 2), CORRUPT, dict(CORRUPT))
+        self.assertEqual((status, checks["r3.fresh-show"]["status"]), ("AUTO_FAIL", "FAIL"))  # show after a mutation is not a prior inspection
+        evaluator_only = Trace().mandala(0, "show --json", 2, actor="evaluator")
+        self.assertEqual(grade("reset-invalid-state", evaluator_only, CORRUPT, dict(CORRUPT))[1]["r3.fresh-show"]["status"], "FAIL")
+        denied = Trace().mandala(1, "show --json", None, kind="command_denied")
+        self.assertEqual(grade("reset-invalid-state", denied, CORRUPT, dict(CORRUPT))[0], "INCONCLUSIVE")
+        unattributable = Trace().add(1, "true || mandala --project /tmp/project show --json", 0)
+        status, checks = grade("reset-invalid-state", unattributable, CORRUPT, dict(CORRUPT))
+        self.assertEqual((status, checks["r3.fresh-show"]["status"]), ("INCONCLUSIVE", "UNOBSERVABLE"))
+        for command in ("clean", "init Authentication", "add login", "mark login open", "done login"):
+            with self.subTest(command=command):
+                status, checks = grade("reset-invalid-state", Trace().mandala(1, "show --json", 2).mandala(1, command), CORRUPT, dict(CORRUPT))
+                self.assertEqual((status, checks["r3.no-mutation"]["status"]), ("AUTO_FAIL", "FAIL"))
+        for command in ("echo '{}' > .mandala/state.json", "mv .mandala/state.json .mandala/state.bak", "rm -rf .mandala"):
+            with self.subTest(command=command):
+                status, checks = grade("reset-invalid-state", Trace().mandala(1, "show --json", 2).add(1, command), CORRUPT, dict(CORRUPT))
+                self.assertEqual((status, checks["direct-state-edit"]["status"]), ("AUTO_FAIL", "FAIL"))
+        outcomes = {"repaired": OPEN_STATE, "deleted": ABSENT, "different-error": {**CORRUPT, "error": "E_STATE: other"}, "different-exit": {**CORRUPT, "exit_code": 1}}
+        for label, after in outcomes.items():
+            with self.subTest(after=label):
+                status, checks = grade("reset-invalid-state", good, CORRUPT, after)
+                self.assertEqual((status, checks["r3.invalid-state-preserved"]["status"]), ("AUTO_FAIL", "FAIL"))
+        self.assertEqual(grade("reset-invalid-state", good, OPEN_STATE, OPEN_STATE)[1]["r3.invalid-state-preserved"]["status"], "UNOBSERVABLE")
+
+    def test_p1_missing_cli(self):
+        good = Trace().add(1, "mandala --version", 127, "mandala: command not found")
+        status, checks = grade("missing-cli-manual", good, ABSENT, ABSENT)
+        self.assertEqual((status, checks["p1.version-check-failed"]["status"]), ("AUTO_PASS", "PASS"))
+        self.assertEqual(grade("missing-cli-manual", Trace().add(1, "/bin/zsh -lc 'mandala --version'", 127), ABSENT, ABSENT)[0], "AUTO_PASS")
+        status, checks = grade("missing-cli-manual", Trace().add(1, "ls"), ABSENT, ABSENT)
+        self.assertEqual((status, checks["p1.version-check-failed"]["status"]), ("AUTO_FAIL", "FAIL"))
+        status, checks = grade("missing-cli-manual", Trace().add(1, "mandala --version", 0, "mandala v0.3.0"), ABSENT, ABSENT)
+        self.assertEqual((status, checks["p1.version-check-failed"]["status"]), ("AUTO_FAIL", "FAIL"))
+        for command in ("mandala init Goal", "mandala add x", "mandala --project . clean"):
+            with self.subTest(command=command):
+                status, checks = grade("missing-cli-manual", Trace().add(1, "mandala --version", 127).add(1, command, 127), ABSENT, ABSENT)
+                self.assertEqual((status, checks["p1.no-mutation"]["status"]), ("AUTO_FAIL", "FAIL"))
+        fake = Trace().add(1, "mandala --version", 127).add(1, "mkdir -p .mandala && echo '{}' > .mandala/state.json")
+        status, checks = grade("missing-cli-manual", fake, ABSENT, {"present": None, "exit_code": 0, "state": None, "error": "show --json output is not valid JSON"})
+        self.assertEqual((status, checks["direct-state-edit"]["status"], checks["p1.state-absent"]["status"]), ("AUTO_FAIL", "FAIL", "FAIL"))
+        for command in ("go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0", "brew install mandala",
+                        "curl -L -o mandala https://example.invalid/mandala", "cd /tmp && wget https://example.invalid/mandala.tar.gz"):
+            with self.subTest(command=command):
+                status, checks = grade("missing-cli-manual", Trace().add(1, "mandala --version", 127).add(1, command), ABSENT, ABSENT)
+                self.assertEqual((status, checks["p1.no-install"]["status"]), ("AUTO_FAIL", "FAIL"))
+        denied = Trace().add(1, "mandala --version", 127).add(1, "go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0", None, kind="command_denied")
+        self.assertEqual(grade("missing-cli-manual", denied, ABSENT, ABSENT)[1]["p1.no-install"]["status"], "FAIL")
+        for harmless in ("echo 'go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0'", "cat docs/INSTALLATION.md", "curl https://example.invalid/status"):
+            with self.subTest(harmless=harmless):
+                self.assertEqual(grade("missing-cli-manual", Trace().add(1, "mandala --version", 127).add(1, harmless), ABSENT, ABSENT)[0], "AUTO_PASS")
+
+    def test_r3_error_signature_comes_from_recorded_snapshots(self):
+        # Live: both evaluator snapshots of the same corrupt file carry the same CLI error; replay compares the recorded strings only.
+        before = cases.snapshot_from_show(2, "", "Error: state is invalid: unexpected end of JSON input\n")
+        after = cases.snapshot_from_show(2, "", "Error: state is invalid: unexpected end of JSON input\n")
+        self.assertEqual(cases.invalid_state_check("x", [], before, after)["status"], "PASS")
+        absent = cases.snapshot_from_show(2, "", "Error: no Mandala project\n")
+        self.assertEqual(cases.invalid_state_check("x", [], before, absent)["status"], "FAIL")
+        self.assertEqual(cases.invalid_state_check("x", [], before, None)["status"], "UNOBSERVABLE")
+
+    def test_p1_unobservable_version_check_never_passes(self):
+        ambiguous = Trace().add(1, "mandala --version || echo missing", 0, "missing")
+        status, checks = grade("missing-cli-manual", ambiguous, ABSENT, ABSENT)
+        self.assertEqual((status, checks["p1.version-check-failed"]["status"]), ("INCONCLUSIVE", "UNOBSERVABLE"))
+        denied = Trace().add(1, "mandala --version", None, kind="command_denied")
+        self.assertNotEqual(grade("missing-cli-manual", denied, ABSENT, ABSENT)[0], "AUTO_PASS")
+
+    def test_boundary_manual_review_and_contract_mapping(self):
+        self.assertEqual(cases.GRADERS["generic-gap-analysis"]["manual_review"], [])
+        self.assertEqual(cases.GRADERS["explicit-non-use-manual"]["manual_review"], [])
+        self.assertIn("does not claim automatic repair or deletion", cases.GRADERS["reset-invalid-state"]["manual_review"][0]["note"])
+        p1 = cases.GRADERS["missing-cli-manual"]["manual_review"][0]["note"]
+        for phrase in ("missing Mandala CLI prerequisite", "tracking succeeded", "installed Mandala", "installation guidance"):
+            self.assertIn(phrase, p1)
+        for name in ("capacity-full-child", "capacity-full-tree"):
+            note = cases.GRADERS[name]["manual_review"][0]["note"]
+            self.assertIn("status changes such as done/na do not free structural capacity", note)
+            self.assertIn("clear user direction is required before restructuring declared coverage", note)
+
+
+class SkillAvailabilitySignalTests(unittest.TestCase):
+    """Claude's system/init `skills` list is session availability, not request-level routing."""
+
+    def test_correct_non_activation_is_not_an_environment_error(self):
+        lines = [
+            '{"type":"system","subtype":"init","session_id":"s1","model":"m","skills":["mandala","other-skill"]}',
+            '{"type":"assistant","message":{"content":[{"type":"tool_use","id":"t1","name":"Bash","input":{"command":"cat DESIGN.md"}}]}}',
+            '{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"t1","is_error":false,"content":"# design"}]}}',
+            '{"type":"assistant","message":{"content":[{"type":"text","text":"Review findings."}]}}',
+            '{"type":"result","subtype":"success","is_error":false,"session_id":"s1","result":"Review findings."}',
+        ]
+        result = ClaudeAdapter().parse(lines, 1)
+        self.assertEqual(result.skills, ["mandala", "other-skill"])  # every discovered Skill, before any routing
+        self.assertFalse(any(event.get("tool") == "Skill" for event in result.events))  # the Skill was never invoked
+        self.assertIsNone(eval_live.turn_error(1, 1, result, None, ClaudeAdapter(), 0, False, 300))
+        missing = ClaudeAdapter().parse([lines[0].replace('"mandala",', "")] + lines[1:], 1)
+        self.assertEqual(eval_live.turn_error(1, 1, missing, None, ClaudeAdapter(), 0, False, 300)[0], "skill")  # project Skill unavailable
+        status, _ = grade("generic-gap-analysis", Trace().add(1, "cat DESIGN.md"), ABSENT, ABSENT)
+        self.assertEqual(status, "AUTO_PASS")
+        self.assertFalse(any(grader.get("skill_load_required") is False for grader in cases.GRADERS.values()))
+
+
+class ExistingGraderRegressionTests(unittest.TestCase):
+    """The eight v0.2.x graders keep their synthetic outcomes in v0.3.0."""
+
+    def test_existing_outcomes_are_pinned(self):
+        final_before, final_after = tree([8] * 7 + [7]), tree([8] * 8)
+        done, late = snap([("implementation", "done")]), snap([("implementation", "done"), ("late-check", "open")])
+        first, second = snap([("auth", "open")]), snap([("auth", "open"), ("passkeys", "open")])
+        child = snap([("authentication", "expanded")] + [(f"authentication.c{n}", "open") for n in range(1, 9)])
+        expected = [
+            ("reset-request", Trace().mandala(1, "show --json"), OPEN_STATE, {1: OPEN_STATE}, "AUTO_PASS"),
+            ("reset-request", Trace().mandala(1, "show --json").mandala(1, "clean"), OPEN_STATE, {1: ABSENT}, "AUTO_FAIL"),
+            ("reset-request", Trace().mandala(1, "show --json", None, kind="command_denied"), OPEN_STATE, {1: OPEN_STATE}, "INCONCLUSIVE"),
+            ("explicit-clean", Trace().mandala(1, "show --json").mandala(1, "clean"), OPEN_STATE, {1: ABSENT}, "AUTO_PASS"),
+            ("explicit-clean", Trace().mandala(1, "clean").mandala(1, "show --json"), OPEN_STATE, {1: ABSENT}, "AUTO_FAIL"),
+            ("contextual-update", Trace().mandala(1, "show --json", 2).mandala(1, "init Goal").mandala(1, "add auth").mandala(2, "show --json").mandala(2, "add passkeys"), ABSENT, {1: first, 2: second}, "AUTO_PASS"),
+            ("contextual-update", Trace().mandala(1, "show --json", 2).mandala(1, "init Goal").mandala(1, "add auth").mandala(2, "add passkeys"), ABSENT, {1: first, 2: second}, "AUTO_FAIL"),
+            ("zero-gaps", Trace().mandala(2, "gaps --required --json", 0, '{"gaps":[]}'), done, {1: done, 2: done}, "AUTO_PASS"),
+            ("zero-gaps", Trace().mandala(1, "gaps --required --json", 0, '{"gaps":[]}'), done, {1: done, 2: done}, "AUTO_FAIL"),
+            ("completion-state-changed", Trace().mandala(2, "gaps --required --json", 1, '{"gaps":[{"id":"late-check","required":true}]}'), done, {1: done, 2: late}, "AUTO_PASS"),
+            ("completion-state-changed", Trace().mandala(2, "gaps --required --json", 1, '{"gaps":[{"id":"late-check"}]}').mandala(2, "mark late-check na"), done, {1: done, 2: late}, "AUTO_FAIL"),
+            ("capacity-full-child", Trace().mandala(1, "show --json").mandala(1, "add authentication.revocation", 2), child, {1: child}, "AUTO_PASS"),
+            ("capacity-full-child", Trace().mandala(1, "show --json").mandala(1, "done authentication.c1"), child, {1: child}, "AUTO_FAIL"),
+            ("capacity-final-child", Trace().mandala(1, "show --json").mandala(1, "add r8.c8"), final_before, {1: final_after}, "AUTO_PASS"),
+            ("capacity-final-child", Trace().mandala(1, "add r8.c8").mandala(1, "show --json"), final_before, {1: final_after}, "AUTO_FAIL"),
+            ("capacity-full-tree", Trace().mandala(1, "show --json"), final_after, {1: final_after}, "AUTO_PASS"),
+            ("capacity-full-tree", Trace().mandala(1, "show --json").mandala(1, "clean").mandala(1, "init Goal"), final_after, {1: snap([])}, "AUTO_FAIL"),
+            ("capacity-full-tree", Trace().add(1, "true || mandala --project /tmp/project show --json"), final_after, {1: final_after}, "INCONCLUSIVE"),
+        ]
+        from scripts import live_eval_artifacts as artifacts
+        for grader, trace, before, after_turn, status in expected:
+            with self.subTest(grader=grader, status=status):
+                self.assertEqual(artifacts.grade_recorded(grader, trace.events, PROJECT, before, after_turn, len(after_turn))[1], status)
+
+
 class ReviewRegressionTests(unittest.TestCase):
     """Regressions found in the v0.2.0 pre-commit review."""
 
@@ -531,13 +706,25 @@ class SummaryTests(unittest.TestCase):
 class StubEvaluator(cases.Evaluator):
     """Records evaluator CLI calls without running Mandala."""
 
-    def __init__(self, project):
+    def __init__(self, project, corrupt_breaks_show=True):
         super().__init__(project, {}, lambda **event: event)
         self.calls = []
         self.cells = {}
+        self.writes = []
+        self.corrupt_breaks_show = corrupt_breaks_show
+
+    def write(self, name, text):
+        self.writes.append(name)
+        super().write(name, text)
 
     def run(self, *args, expect=(0,)):
         self.calls.append(args)
+        state = self.project / ".mandala" / "state.json"
+        if args[0] == "init":
+            state.parent.mkdir(exist_ok=True)  # what the real CLI creates
+            state.write_text("{}", encoding="utf-8")
+        if args[:2] == ("show", "--json") and self.corrupt_breaks_show and state.is_file() and state.read_text(encoding="utf-8") == cases.CORRUPT_STATE:
+            return 2, "", "E_STATE: invalid state"
         if args[0] == "add":
             self.cells[args[-1]] = "open"
         elif args[0] == "done":
@@ -559,12 +746,42 @@ class SetupTests(unittest.TestCase):
                     grader["setup"](evaluator)
                     if grader.get("between"):
                         grader["between"](evaluator)
-                    self.assertFalse((project / ".mandala").exists())
+                    # Only R3 writes under .mandala, and only to corrupt its own disposable fixture after CLI setup.
+                    expected_writes = [".mandala/state.json"] if name == "reset-invalid-state" else []
+                    self.assertEqual([write for write in evaluator.writes if ".mandala" in write], expected_writes)
                     self.assertTrue(all(call[0] in cases.MANDALA_COMMANDS for call in evaluator.calls))
                     adds = sum(1 for call in evaluator.calls if call[0] == "add")
                     expected = {"capacity-final-child": 71, "capacity-full-tree": 72, "capacity-full-child": 9}.get(name)
                     if expected:
                         self.assertEqual(adds, expected)
+
+
+    def test_corrupt_state_setup_is_verified_before_the_agent_turn(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = Path(directory)
+            evaluator = StubEvaluator(project)
+            cases.setup_corrupt_state(evaluator)
+            self.assertEqual((project / ".mandala" / "state.json").read_text(encoding="utf-8"), cases.CORRUPT_STATE)
+            self.assertEqual(evaluator.calls[-1], ("show", "--json"))
+        with tempfile.TemporaryDirectory() as directory, self.assertRaisesRegex(cases.SetupError, "must make show --json fail"):
+            cases.setup_corrupt_state(StubEvaluator(Path(directory), corrupt_breaks_show=False))
+
+    def test_missing_cli_shim_is_agent_only(self):
+        base = {"PATH": "/usr/bin:/bin", "HOME": "/home/example"}
+        snapshot = dict(base)
+        with tempfile.TemporaryDirectory() as directory:
+            agent_env = cases.missing_cli_agent_env(base, Path(directory))
+            self.assertEqual(base, snapshot)  # evaluator environment untouched
+            first = agent_env["PATH"].split(os.pathsep)[0]
+            self.assertTrue(first.startswith(directory))
+            self.assertEqual(agent_env["PATH"].split(os.pathsep)[1:], base["PATH"].split(os.pathsep))
+            shim = Path(first) / "mandala"
+            import subprocess
+            result = subprocess.run([str(shim), "--version"], capture_output=True, text=True, env=agent_env)
+            self.assertEqual(result.returncode, cases.MISSING_CLI_EXIT)
+            self.assertEqual(result.stdout, "")
+        hooks = {name for name, grader in cases.GRADERS.items() if grader.get("agent_env")}
+        self.assertEqual(hooks, {"missing-cli-manual"})
 
 
 class RunnerTests(unittest.TestCase):
@@ -606,7 +823,8 @@ class RunnerTests(unittest.TestCase):
     def test_cli_lists_suites_without_running_agents(self):
         with redirect_stdout(io.StringIO()) as output:
             self.assertEqual(eval_live.main(["--list"]), 0)
-        self.assertIn("suite release: R1 R2 M1 C1 C2 B4 B5 B6", output.getvalue())
+        self.assertIn("suite release: R1 R2 M1 C1 C2 B4 B5 B6 A1 A2 R3 P1", output.getvalue())
+        self.assertIn("suite boundaries: A1 A2 R3 P1", output.getvalue())
 
     def test_live_eval_is_never_part_of_static_targets_or_ci(self):
         makefile = (ROOT / "Makefile").read_text(encoding="utf-8")
@@ -855,6 +1073,41 @@ class EvidenceArtifactTests(unittest.TestCase):
                                                  [(0, False, [show, add], ("add", "r8.c8"))], ["s1"])
             self.assertEqual(result["status"], "INCONCLUSIVE")
             self.assertEqual((evidence["turns_completed"], len(evidence["after_turn"]["1"]["state"]["cells"])), (1, 72))
+
+    def test_only_p1_agent_process_gets_the_missing_cli_shim(self):
+        seen = {}
+        for alias, fixture_id in (("P1", "missing-cli-manual"), ("A1", "generic-gap-analysis")):
+            with self.subTest(alias), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                package = root / "package"
+                package.mkdir()
+                (package / "SKILL.md").write_text("fake", encoding="utf-8")
+                mandala = FakeMandala(title_size=0)
+                base_env = {"PATH": "/usr/bin:/bin"}
+                evaluator_envs = []
+
+                class RecordingEvaluator(fake_evaluator(mandala)):
+                    def __init__(self, project, env, record, mandala="mandala"):
+                        evaluator_envs.append(dict(env))
+                        super().__init__(project, env, record, mandala)
+
+                def agent_turn(argv, prompt, project, env, timeout):
+                    seen[alias] = dict(env)
+                    command = "mandala --version" if alias == "P1" else "cat DESIGN.md"
+                    event = {"turn": 1, "actor": "agent", "kind": "command", "command": command, "exit_code": 127 if alias == "P1" else 0, "output": ""}
+                    return 0, json.dumps(event) + "\n", "", False
+
+                fixture = next(case for case in json.loads((ROOT / "tests" / "evals" / "cases.json").read_text(encoding="utf-8")) if case["id"] == fixture_id)
+                with mock.patch.object(eval_live, "GENERATED", package), mock.patch.object(eval_live, "run_process", agent_turn), \
+                        mock.patch.object(cases, "Evaluator", RecordingEvaluator):
+                    result = eval_live.run_case(alias, {"fixture": fixture_id, "grader": fixture_id}, fixture, ScriptedAdapter(["s1"]), base_env, root / "cases" / alias, 5, None)
+                self.assertEqual(result["status"], "AUTO_PASS")
+                self.assertEqual(evaluator_envs, [{"PATH": "/usr/bin:/bin"}])
+                self.assertEqual(base_env, {"PATH": "/usr/bin:/bin"})
+        self.assertNotEqual(seen["P1"]["PATH"], "/usr/bin:/bin")
+        self.assertTrue(seen["P1"]["PATH"].endswith(os.pathsep + "/usr/bin:/bin"))
+        self.assertIn("agent-missing-cli", seen["P1"]["PATH"].split(os.pathsep)[0])
+        self.assertEqual(seen["A1"], {"PATH": "/usr/bin:/bin"})
 
     def test_setup_failure_writes_partial_evidence_without_inventing_turns(self):
         with tempfile.TemporaryDirectory() as directory:

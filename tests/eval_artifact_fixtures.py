@@ -188,6 +188,46 @@ def c2_case(status="AUTO_PASS"):
     return spec
 
 
+NO_PROJECT = "E_NO_PROJECT: no Mandala project"
+CORRUPT_ERROR = "E_STATE: state.json is not valid JSON"
+
+
+def a1_case():
+    spec = CaseSpec("A1", "generic-gap-analysis")
+    spec.snapshot(0, stdout=NO_PROJECT, exit_code=2)
+    spec.agent(1, "cat DESIGN.md", 0, "# Authentication design")
+    spec.agent(1, f"mandala --project {PLACEHOLDER} show --json", 2, NO_PROJECT)  # reads are allowed
+    spec.snapshot(1, stdout=NO_PROJECT, exit_code=2)
+    return spec
+
+
+def a2_case():
+    spec = CaseSpec("A2", "explicit-non-use-manual")
+    spec.evaluator(0, "init", "Authentication design coverage")
+    spec.snapshot(0, "Authentication design coverage", OPEN_CELLS)
+    spec.agent(1, "cat README.md", 0, "# Authentication service")
+    spec.snapshot(1, "Authentication design coverage", OPEN_CELLS)
+    return spec
+
+
+def r3_case(status="AUTO_PASS"):
+    spec = CaseSpec("R3", "reset-invalid-state", status, manual_review=[{"contracts": ["CLEAN-002", "CLEAN-005"], "note": "Response reports the corrupt/invalid state."}])
+    spec.evaluator(0, "init", "Authentication design coverage")
+    spec.evaluator(0, "show", "--json", exit_code=2, output=CORRUPT_ERROR)  # setup confirmation, not a snapshot
+    spec.snapshot(0, stdout=CORRUPT_ERROR, exit_code=2)
+    spec.agent(1, f"mandala --project {PLACEHOLDER} show --json", 2, CORRUPT_ERROR)
+    spec.snapshot(1, stdout=CORRUPT_ERROR, exit_code=2)
+    return spec
+
+
+def p1_case(status="AUTO_PASS"):
+    spec = CaseSpec("P1", "missing-cli-manual", status, manual_review=[{"contracts": ["CLI-001"], "note": "Response reports the missing Mandala CLI prerequisite."}])
+    spec.snapshot(0, stdout=NO_PROJECT, exit_code=2)
+    spec.agent(1, "mandala --version", 127, "mandala: command not found")
+    spec.snapshot(1, stdout=NO_PROJECT, exit_code=2)
+    return spec
+
+
 def environment_error_case():
     spec = CaseSpec("B4", "capacity-full-child", "ENVIRONMENT_ERROR",
                     manual_review=[{"contracts": ["CAP-001", "CAP-005"], "note": "Response explains done/na do not free capacity and asks for direction before restructuring."}],

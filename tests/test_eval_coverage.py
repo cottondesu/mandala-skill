@@ -140,6 +140,30 @@ class CoverageTests(unittest.TestCase):
         self.assertNotIn("%", eval_coverage.render_coverage(coverage))
 
 
+class ReleaseScopeCoverageTests(unittest.TestCase):
+    def test_complete_release_scope_is_not_all_observed(self):
+        manifest = json.loads((ROOT / "tests" / "evals" / "live_suites.json").read_text(encoding="utf-8"))
+        specs = [fx.CaseSpec(alias, manifest["cases"][alias]["fixture"], "ENVIRONMENT_ERROR") for alias in manifest["suites"]["release"]]
+        with tempfile.TemporaryDirectory() as directory:
+            fx.write_run(Path(directory) / "codex", specs)
+            coverage = eval_coverage.build_coverage(artifacts.Source(str(Path(directory) / "codex")))
+        # Every contract is in declared scope, yet nothing was observed: NOT_EXERCISED 0 is not a pass.
+        self.assertEqual(coverage["counts"]["NOT_EXERCISED"], 0)
+        self.assertEqual(coverage["counts"]["FIXTURE_ONLY"], 23)
+        self.assertEqual(coverage["counts"]["AUTOMATED_OBSERVED"], 0)
+
+    def test_boundary_cases_contribute_their_contracts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            fx.write_run(Path(directory) / "codex", [fx.a1_case(), fx.a2_case(), fx.r3_case(), fx.p1_case()])
+            coverage = eval_coverage.build_coverage(artifacts.Source(str(Path(directory) / "codex")))
+        rows = {row["id"]: row for row in coverage["contracts"]}
+        self.assertIn({"case": "A1", "check": "a1.no-mutation"}, rows["AUTH-002"]["automatic_pass_checks"])
+        self.assertIn({"case": "A2", "check": "a2.state-preserved"}, rows["AUTH-003"]["automatic_pass_checks"])
+        self.assertIn({"case": "R3", "check": "r3.invalid-state-preserved"}, rows["CLEAN-005"]["automatic_pass_checks"])
+        self.assertIn({"case": "P1", "check": "p1.no-mutation"}, rows["CLI-001"]["automatic_pass_checks"])
+        self.assertEqual(rows["CLEAN-005"]["manual_review_required_by"], ["R3"])
+
+
 class CoverageCliTests(unittest.TestCase):
     def test_cli_writes_report_outside_source_and_accepts_replay_output(self):
         from scripts import eval_replay
