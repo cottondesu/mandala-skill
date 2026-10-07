@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.2.0 (unreleased)
+## v0.2.0 (2026-10-07)
 
 - Assign stable IDs to the 23 safety contracts and use them throughout behavioral fixture coverage.
 - Add a local cross-agent live-evaluation harness for the focused freshness/reset/completion and capacity scenarios.
