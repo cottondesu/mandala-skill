@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.3.0 (unreleased)
+## v0.3.0 (2026-10-08)
 
 - Harden capacity-limit responses: the Skill now says to tell the user that status changes do not create capacity, without increasing the canonical Skill size (a 6214-byte UTF-8 budget is now validated).
 - Add four boundary live scenarios using existing fixtures: generic gap analysis (A1), explicit non-use (A2), corrupt state on reset (R3), and an agent-side missing CLI (P1).
