@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import argparse
+import re
 import sys
 from typing import Dict, List, Optional
 
@@ -32,6 +33,12 @@ SEMANTICS = {
     "manual_review_required_by": "Cases whose recorded response still requires manual review for this contract. Manual review required is not a manual review result; the harness records no reviewer verdict.",
     "coverage_state": "One convenience label, by precedence AUTOMATED_OBSERVED > UNOBSERVABLE_ONLY > MANUAL_REQUIRED_ONLY > FIXTURE_ONLY > NOT_EXERCISED. It is not a pass rate.",
 }
+
+PLAIN_AGENT = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
+
+
+def default_output_agent(agent) -> str:
+    return agent if isinstance(agent, str) and PLAIN_AGENT.fullmatch(agent) else "unknown"
 
 
 def _string_list(value, label: str) -> List[str]:
@@ -198,7 +205,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     try:
         source = artifacts.Source(args.source)
         coverage = build_coverage(source)
-        target = Path(args.output_dir) if args.output_dir else artifacts.OUTPUT_ROOT / "coverage" / artifacts.new_id("coverage", source.agent)
+        target = Path(args.output_dir) if args.output_dir else artifacts.OUTPUT_ROOT / "coverage" / artifacts.new_id("coverage", default_output_agent(source.agent))
         output = artifacts.prepare_output_dir(target, [source.root])
         write_coverage(output, coverage)
     except (artifacts.ArtifactError, OSError) as exc:

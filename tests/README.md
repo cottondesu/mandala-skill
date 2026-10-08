@@ -171,6 +171,39 @@ python3 scripts/eval_coverage.py .eval-live/replays/<replay-id> --output-dir .ev
 
 `coverage_state` is one convenience label with precedence `AUTOMATED_OBSERVED` (any PASS or FAIL check) > `UNOBSERVABLE_ONLY` > `MANUAL_REQUIRED_ONLY` > `FIXTURE_ONLY` > `NOT_EXERCISED`. Only completed live cases (`AUTO_PASS`, `AUTO_FAIL`, `INCONCLUSIVE`) or `REPLAYED` replay cases contribute checks and manual-review requirements; environment, unsupported, not-run, and unreplayable cases contribute fixture scope only. Unknown contract IDs are a structural error. This is not a pass rate or a safety claim. For a completed release-suite report, `NOT_EXERCISED 0` means the declared fixture scope is complete; it is not proof that every contract passed. Exit codes: `0` report generated; `2` malformed or unsupported input. Behavioral failures are reported data, not an exit status.
 
+### Real-world coverage profiles
+
+```sh
+python3 scripts/eval_profile.py --list-profiles
+python3 scripts/eval_profile.py .eval-live/<run>/<agent> --profile tracked-design-review
+python3 scripts/eval_profile.py \
+  .eval-live/replays/<replay-id> \
+  --profile capacity-constrained-expansion \
+  --output-dir .eval-live/profiles/example
+```
+
+A coverage profile is a curated, post-hoc applicability view over evidence that already exists in one agent-level live run directory or replay output directory. It answers: for this practical Mandala workflow, which safety contracts are in scope, and what evidence from this source exists for them? It is not a suite and runs nothing: no agent, no Mandala CLI, no recorded command, and no network access. It does not replace the 12-case release suite, which remains the release evaluation. It is not a pass rate, a score, a release gate, or proof of verification, and it reports no percentages.
+
+`evals/profiles.json` (`schema_version: 1`) defines three initial profiles. Each classifies every release-suite case exactly once, in release-suite order, with a rationale; `make check` fails if a release case is added without being classified in every profile.
+
+| Profile | CORE cases | CONDITIONAL cases | NOT_APPLICABLE cases | Derived contracts (CORE / CONDITIONAL / NOT_APPLICABLE) |
+| --- | --- | --- | --- | --- |
+| `tracked-design-review` | M1, C1, C2 | R1, R2, B4, B5, B6, A1, A2, R3, P1 | none | 9 / 14 / 0 |
+| `capacity-constrained-expansion` | M1, B4, B5, B6 | C1, C2, P1 | R1, R2, A1, A2, R3 | 8 / 8 / 7 |
+| `reset-recovery` | R1, R2, R3 | P1 | M1, C1, C2, B4, B5, B6, A1, A2 | 7 / 2 / 14 |
+
+- **CORE**: the case represents behavior intrinsic to the profile's normal workflow. It is workflow applicability, not severity, importance, success, or verification.
+- **CONDITIONAL**: the case matters only when its documented `condition` occurs (for example, the Mandala CLI is unavailable).
+- **NOT_APPLICABLE**: the case is outside this profile view only. It is not globally irrelevant, unnecessary to test, or a retired contract.
+
+Contract applicability is derived, never listed in `profiles.json`: a safety contract is CORE when a CORE case's current fixture (via `evals/live_suites.json` and `evals/cases.json`) declares it, otherwise CONDITIONAL when a CONDITIONAL case's fixture declares it, otherwise NOT_APPLICABLE. Recorded checks, manual-review entries, coverage states, `summary.json` coverage, final prose, and `task_contracts` never change it.
+
+Evidence reuses the coverage report's recomputation (`summary.json`'s `contract_coverage` is not trusted) and its states and precedence. Each contract row has two separate buckets: `core_evidence` uses only that contract's CORE cases and `conditional_evidence` uses only its CONDITIONAL cases. **Conditional evidence never satisfies missing CORE evidence**, and NOT_APPLICABLE cases contribute nothing. `AUTOMATED_OBSERVED` includes automated FAIL: observed is not successful. **Manual review required is not manual review passed.** `NOT_EXERCISED 0` is not success.
+
+The source may be current, historical, or incomplete. A profile case missing from the source is reported as `source_present: false` and `source_status: NOT_PRESENT`; nothing is synthesized. A listed `NOT_RUN` case keeps that status. A profiled alias recorded with a fixture other than its current mapping is an error. Source aliases the profile does not classify are listed in `unprofiled_source_cases` and ignored. Sanitized share bundles and other directories are rejected as sources.
+
+Output is `profile.json` (`mandala-coverage-profile-report`, `schema_version: 1`) and `profile.md`, in `.eval-live/profiles/<id>/` by default or an empty `--output-dir` under the rules above. The report keeps only structured identifiers (source kind, ID, agent, suite, completeness, case statuses, check IDs); it copies no raw traces, commands or output, final responses, stderr, session IDs, preflight details, or error messages. That is a structural choice, not a privacy guarantee; the report is not sanitized. Exit codes: `0` report or listing generated; `2` malformed catalog, unknown profile, malformed, unsupported, or unsafe source or output, or fixture mismatch. Behavioral failures are reported data, not an exit status.
+
 ### Privacy-reduced share bundle
 
 ```sh
@@ -185,4 +218,4 @@ The sanitizer reduces known local identifiers and excludes high-risk artifacts. 
 
 ## Task-level field usage example
 
-`fixtures/field_usage/version_contracts.json` (`mandala-field-usage-example`) is a sanitized example from real-world Mandala use: tracking release version contracts as task coverage (Gem and CLI `0.3.0`, JSON schema `3` checked on success and failure paths, config schema `1` with version 2 still rejected, Ruby `>= 3.3`, Prism `>= 1.9, < 2`, and no added dependencies). Its `task_contracts` are task-level coverage items, not any of the 23 Skill safety contracts in `evals/contracts.json`. It is not a behavioral, activation, or live fixture and not a replay input. `make check` validates its structure.
+`fixtures/field_usage/version_contracts.json` (`mandala-field-usage-example`) is a sanitized example from real-world Mandala use: tracking release version contracts as task coverage (Gem and CLI `0.3.0`, JSON schema `3` checked on success and failure paths, config schema `1` with version 2 still rejected, Ruby `>= 3.3`, Prism `>= 1.9, < 2`, and no added dependencies). Its `task_contracts` are task-level coverage items, not any of the 23 Skill safety contracts in `evals/contracts.json`. It is not a behavioral, activation, or live fixture and not a replay input. Coverage profiles are not inferred from it, and its task contracts are never mapped to safety contract IDs. `make check` validates its structure.

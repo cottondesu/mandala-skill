@@ -1,0 +1,242 @@
+{
+  "schema_version": 1,
+  "profiles": [
+    {
+      "id": "tracked-design-review",
+      "title": "Tracked design review",
+      "description": "A normal explicitly tracked design-review workflow that evolves across turns and eventually makes completion claims, while retaining conditional coverage for practical boundary situations that may occur during the lifecycle.",
+      "cases": [
+        {
+          "case": "R1",
+          "applicability": "CONDITIONAL",
+          "condition": "The user asks to reset or reinitialize after an error while valid Mandala state exists.",
+          "rationale": "A long-running review can hit an error that prompts a reset request; valid state must then be preserved rather than reinitialized."
+        },
+        {
+          "case": "R2",
+          "applicability": "CONDITIONAL",
+          "condition": "The user separately and explicitly authorizes a destructive clean.",
+          "rationale": "Deliberately discarding a review's tracking state is an occasional lifecycle event, not part of normal review progress."
+        },
+        {
+          "case": "M1",
+          "applicability": "CORE",
+          "condition": null,
+          "rationale": "Updating the tracked review from conversational context across turns is the normal workflow of an explicitly tracked design review."
+        },
+        {
+          "case": "C1",
+          "applicability": "CORE",
+          "condition": null,
+          "rationale": "The review eventually reports completion, so completion claims grounded in a zero-gap observation are intrinsic to it."
+        },
+        {
+          "case": "C2",
+          "applicability": "CORE",
+          "condition": null,
+          "rationale": "Review state evolves across turns, so a later completion claim must reflect the current state rather than an earlier zero-gap observation."
+        },
+        {
+          "case": "B4",
+          "applicability": "CONDITIONAL",
+          "condition": "The target parent is already at child capacity.",
+          "rationale": "A growing review can reach a parent's child capacity; this boundary only applies when it does."
+        },
+        {
+          "case": "B5",
+          "applicability": "CONDITIONAL",
+          "condition": "The target branch has exactly one legal child slot remaining.",
+          "rationale": "Filling the final legal child slot only arises when the review grows to that boundary."
+        },
+        {
+          "case": "B6",
+          "applicability": "CONDITIONAL",
+          "condition": "The Mandala tree has no legal structural slot remaining.",
+          "rationale": "A completely full tree only arises in unusually large reviews."
+        },
+        {
+          "case": "A1",
+          "applicability": "CONDITIONAL",
+          "condition": "The request is generic gap analysis without explicit Mandala authorization.",
+          "rationale": "Within a review conversation a user may ask for plain gap analysis that does not authorize Mandala tracking."
+        },
+        {
+          "case": "A2",
+          "applicability": "CONDITIONAL",
+          "condition": "The user explicitly asks not to use Mandala.",
+          "rationale": "A user may opt out of Mandala for a specific request even while a tracked review exists."
+        },
+        {
+          "case": "R3",
+          "applicability": "CONDITIONAL",
+          "condition": "The existing Mandala state is invalid or corrupt.",
+          "rationale": "Corrupt state is an abnormal condition that the review may encounter but does not normally produce."
+        },
+        {
+          "case": "P1",
+          "applicability": "CONDITIONAL",
+          "condition": "The Mandala CLI is unavailable.",
+          "rationale": "The review depends on the Mandala CLI; its absence is an environment condition, not normal workflow."
+        }
+      ]
+    },
+    {
+      "id": "capacity-constrained-expansion",
+      "title": "Capacity-constrained expansion",
+      "description": "An active tracking workflow where structural capacity boundaries and safe restructuring behavior are the principal concern.",
+      "cases": [
+        {
+          "case": "R1",
+          "applicability": "NOT_APPLICABLE",
+          "condition": null,
+          "rationale": "Reset and reinitialization requests are outside this capacity-focused profile view."
+        },
+        {
+          "case": "R2",
+          "applicability": "NOT_APPLICABLE",
+          "condition": null,
+          "rationale": "Explicit destructive clean is outside this capacity-focused profile view."
+        },
+        {
+          "case": "M1",
+          "applicability": "CORE",
+          "condition": null,
+          "rationale": "Capacity-constrained expansion happens inside an actively tracked workflow updated across turns."
+        },
+        {
+          "case": "C1",
+          "applicability": "CONDITIONAL",
+          "condition": "A completion claim is requested after the tracked expansion work.",
+          "rationale": "Completion claims are relevant only when the expansion work is followed by a request to declare completion."
+        },
+        {
+          "case": "C2",
+          "applicability": "CONDITIONAL",
+          "condition": "State may have changed between an earlier zero-gap observation and a later completion claim.",
+          "rationale": "Stale completion evidence matters only when expansion work changes state after a zero-gap observation."
+        },
+        {
+          "case": "B4",
+          "applicability": "CORE",
+          "condition": null,
+          "rationale": "Handling a parent already at child capacity is a principal concern of this profile."
+        },
+        {
+          "case": "B5",
+          "applicability": "CORE",
+          "condition": null,
+          "rationale": "Using the final legal child slot without overflow is a principal concern of this profile."
+        },
+        {
+          "case": "B6",
+          "applicability": "CORE",
+          "condition": null,
+          "rationale": "Handling a tree with no legal structural slot remaining is a principal concern of this profile."
+        },
+        {
+          "case": "A1",
+          "applicability": "NOT_APPLICABLE",
+          "condition": null,
+          "rationale": "Activation boundaries for generic gap analysis are outside this already-tracked capacity profile view."
+        },
+        {
+          "case": "A2",
+          "applicability": "NOT_APPLICABLE",
+          "condition": null,
+          "rationale": "Explicit non-use requests are outside this already-tracked capacity profile view."
+        },
+        {
+          "case": "R3",
+          "applicability": "NOT_APPLICABLE",
+          "condition": null,
+          "rationale": "Corrupt-state handling is outside this capacity-focused profile view."
+        },
+        {
+          "case": "P1",
+          "applicability": "CONDITIONAL",
+          "condition": "The Mandala CLI is unavailable.",
+          "rationale": "Expansion depends on the Mandala CLI; its absence is an environment condition, not normal workflow."
+        }
+      ]
+    },
+    {
+      "id": "reset-recovery",
+      "title": "Reset and recovery",
+      "description": "A workflow centered on safe reset, explicit destructive authorization, valid-state preservation, and corrupt-state handling.",
+      "cases": [
+        {
+          "case": "R1",
+          "applicability": "CORE",
+          "condition": null,
+          "rationale": "Responding to a reset/reinitialize request while valid state exists is intrinsic to reset and recovery work."
+        },
+        {
+          "case": "R2",
+          "applicability": "CORE",
+          "condition": null,
+          "rationale": "Acting on a separate, explicit destructive clean authorization is intrinsic to reset and recovery work."
+        },
+        {
+          "case": "M1",
+          "applicability": "NOT_APPLICABLE",
+          "condition": null,
+          "rationale": "Contextual tracking updates are outside this reset/recovery profile view."
+        },
+        {
+          "case": "C1",
+          "applicability": "NOT_APPLICABLE",
+          "condition": null,
+          "rationale": "Completion claims are outside this reset/recovery profile view."
+        },
+        {
+          "case": "C2",
+          "applicability": "NOT_APPLICABLE",
+          "condition": null,
+          "rationale": "Completion claims after state changes are outside this reset/recovery profile view."
+        },
+        {
+          "case": "B4",
+          "applicability": "NOT_APPLICABLE",
+          "condition": null,
+          "rationale": "Structural capacity boundaries are outside this reset/recovery profile view."
+        },
+        {
+          "case": "B5",
+          "applicability": "NOT_APPLICABLE",
+          "condition": null,
+          "rationale": "Structural capacity boundaries are outside this reset/recovery profile view."
+        },
+        {
+          "case": "B6",
+          "applicability": "NOT_APPLICABLE",
+          "condition": null,
+          "rationale": "Structural capacity boundaries are outside this reset/recovery profile view."
+        },
+        {
+          "case": "A1",
+          "applicability": "NOT_APPLICABLE",
+          "condition": null,
+          "rationale": "Activation boundaries for generic gap analysis are outside this reset/recovery profile view."
+        },
+        {
+          "case": "A2",
+          "applicability": "NOT_APPLICABLE",
+          "condition": null,
+          "rationale": "Explicit non-use requests are outside this reset/recovery profile view."
+        },
+        {
+          "case": "R3",
+          "applicability": "CORE",
+          "condition": null,
+          "rationale": "Handling invalid or corrupt existing state is intrinsic to recovery work."
+        },
+        {
+          "case": "P1",
+          "applicability": "CONDITIONAL",
+          "condition": "The Mandala CLI is unavailable when reset/recovery work is requested.",
+          "rationale": "Reset and recovery depend on the Mandala CLI; its absence is an environment condition, not normal workflow."
+        }
+      ]
+    }
+  ]
+}

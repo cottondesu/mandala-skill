@@ -47,7 +47,7 @@ make release-check
 
 `make build` は `dist/mandala/` に正本と byte 単位で一致する共通 package を生成し、Codex と Claude Code の両方で使えます。`make check` と `make test` はこの生成物を必要とします。正本をコピーする導入には build も Python も不要です。
 
-build、validation、test は Python 標準ライブラリだけで動き、ネットワークは不要です。`make check` は package の整合性、有効な指示文にある 23 個の安全契約（`tests/evals/contracts.json` の `STATE-001` などの固定 ID）、Agent Skills の `name`/`description` metadata 制約、正本 `SKILL.md` の 6214 UTF-8 バイトのサイズ上限（決定的に測れる context サイズの目安で、特定の tokenizer の token 数ではありません）、`tests/evals/cases.json` の行動評価 fixture metadata、`tests/evals/activation.json` の activation routing fixture metadata、`tests/evals/live_suites.json` の live suite 定義を検査します。Codex / Claude Code を起動したり、実際の agent behavior を保証したりはしません。release 前に[手動の行動評価](tests/README.ja.md)を実施してください。`dist/` を直接編集しないでください。
+build、validation、test は Python 標準ライブラリだけで動き、ネットワークは不要です。`make check` は package の整合性、有効な指示文にある 23 個の安全契約（`tests/evals/contracts.json` の `STATE-001` などの固定 ID）、Agent Skills の `name`/`description` metadata 制約、正本 `SKILL.md` の 6214 UTF-8 バイトのサイズ上限（決定的に測れる context サイズの目安で、特定の tokenizer の token 数ではありません）、`tests/evals/cases.json` の行動評価 fixture metadata、`tests/evals/activation.json` の activation routing fixture metadata、`tests/evals/live_suites.json` の live suite 定義、`tests/evals/profiles.json` の実利用 coverage profile 定義を検査します。Codex / Claude Code を起動したり、実際の agent behavior を保証したりはしません。release 前に[手動の行動評価](tests/README.ja.md)を実施してください。`dist/` を直接編集しないでください。
 
 `make release-check` は `make build`、`make check`、`make test` を順番に実行した後、ローカルの Git hygiene（`git diff --check`、生成物や cache が tracked でないこと、`dist/mandala/` が tracked の `.gitignore` で ignore されていること、古い分割配布 layout への参照がないこと）を検査します。未 commit の変更があっても実行でき、live agent は起動せず、release も公開しません。
 
@@ -59,11 +59,13 @@ python3 scripts/eval_live.py --agent claude --preflight
 python3 scripts/eval_live.py --agent claude --case R1
 ```
 
-記録済みの実行結果は、agent・Mandala CLI・ネットワークなしでオフライン確認できます。replay は記録済みの証拠を現在の決定的 grader で再判定します（agent や Mandala CLI を再実行せず、最終回答の文面も再判定しません）。coverage レポートは、fixture が宣言した範囲と、実際に観測された自動検査の証拠、手動確認の要求を区別します。sanitizer は whitelist 方式で情報を減らした共有用 bundle を作ります。secret scanner ではないため、共有前に必ず内容を確認してください。この bundle は replay できません。詳しくは[オフライン評価ツール](tests/README.ja.md#オフライン評価ツール)を参照してください。
+記録済みの実行結果は、agent・Mandala CLI・ネットワークなしでオフライン確認できます。replay は記録済みの証拠を現在の決定的 grader で再判定します（agent や Mandala CLI を再実行せず、最終回答の文面も再判定しません）。coverage レポートは、fixture が宣言した範囲と、実際に観測された自動検査の証拠、手動確認の要求を区別します。coverage profile（`tracked-design-review`、`capacity-constrained-expansion`、`reset-recovery`）は、1 つの実用的なワークフローについて release の case を CORE・CONDITIONAL・NOT_APPLICABLE に分類し、現在の fixture の宣言から契約の範囲を導出して、CORE と CONDITIONAL の証拠を分けて示す事後的なビューです。agent を実行せず、release suite の代わりにはならず、合格率やスコアでもありません。sanitizer は whitelist 方式で情報を減らした共有用 bundle を作ります。secret scanner ではないため、共有前に必ず内容を確認してください。この bundle は replay できません。詳しくは[オフライン評価ツール](tests/README.ja.md#オフライン評価ツール)を参照してください。
 
 ```sh
 python3 scripts/eval_replay.py .eval-live/<run>/<agent> --case B5
 python3 scripts/eval_coverage.py .eval-live/<run>/<agent>
+python3 scripts/eval_profile.py --list-profiles
+python3 scripts/eval_profile.py .eval-live/<run>/<agent> --profile tracked-design-review
 python3 scripts/eval_sanitize.py \
   .eval-live/<run>/<agent> \
   --output-dir .eval-live/exports/example

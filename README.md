@@ -47,7 +47,7 @@ make release-check
 
 `make build` creates a byte-equivalent package at `dist/mandala/` for both Codex and Claude Code; `make check` and `make test` require that output. Source-copy installation needs neither this build nor Python.
 
-Build, validation, and tests use the Python standard library and require no network. `make check` validates package integrity, the 23 safety contracts in active instruction prose (stable IDs such as `STATE-001` in `tests/evals/contracts.json`), the Agent Skills `name`/`description` metadata constraints, a 6214-byte UTF-8 size budget for the canonical `SKILL.md` (a deterministic context-size proxy, not a tokenizer-specific token budget), behavioral fixture metadata in `tests/evals/cases.json`, and activation-routing fixture metadata in `tests/evals/activation.json`, and the live-suite manifest in `tests/evals/live_suites.json`. They do not run Codex or Claude Code or establish live agent behavior. Run the [manual behavioral evaluation](tests/README.md) before release. Do not edit `dist/` directly.
+Build, validation, and tests use the Python standard library and require no network. `make check` validates package integrity, the 23 safety contracts in active instruction prose (stable IDs such as `STATE-001` in `tests/evals/contracts.json`), the Agent Skills `name`/`description` metadata constraints, a 6214-byte UTF-8 size budget for the canonical `SKILL.md` (a deterministic context-size proxy, not a tokenizer-specific token budget), behavioral fixture metadata in `tests/evals/cases.json`, and activation-routing fixture metadata in `tests/evals/activation.json`, the live-suite manifest in `tests/evals/live_suites.json`, and the real-world coverage profile catalog in `tests/evals/profiles.json`. They do not run Codex or Claude Code or establish live agent behavior. Run the [manual behavioral evaluation](tests/README.md) before release. Do not edit `dist/` directly.
 
 `make release-check` runs `make build`, `make check`, and `make test` in order, then local Git hygiene checks: `git diff --check`, no tracked generated or cache files, `dist/mandala/` ignored by the tracked `.gitignore`, and no stale split-distribution layout references. It allows uncommitted changes, does not run live agents, and does not publish a release.
 
@@ -59,11 +59,13 @@ python3 scripts/eval_live.py --agent claude --preflight
 python3 scripts/eval_live.py --agent claude --case R1
 ```
 
-Recorded runs can be inspected offline without an agent, Mandala CLI, or network. Replay re-grades recorded evidence with the current deterministic graders (it never reruns an agent or Mandala CLI and never re-grades final prose). The coverage report separates declared fixture scope from observed automated evidence and manual-review requirements. The sanitizer writes a whitelist-based, privacy-reduced share bundle; it is not a secret scanner, its output must be reviewed before sharing, and it cannot be replayed. See [offline evaluation tools](tests/README.md#offline-evaluation-tools).
+Recorded runs can be inspected offline without an agent, Mandala CLI, or network. Replay re-grades recorded evidence with the current deterministic graders (it never reruns an agent or Mandala CLI and never re-grades final prose). The coverage report separates declared fixture scope from observed automated evidence and manual-review requirements. A coverage profile (`tracked-design-review`, `capacity-constrained-expansion`, or `reset-recovery`) is a post-hoc view that classifies the release cases as CORE, CONDITIONAL, or NOT_APPLICABLE for one practical workflow, derives contract scope from current fixture declarations, and shows CORE and CONDITIONAL evidence separately; it runs no agent, does not replace the release suite, and is not a pass rate or score. The sanitizer writes a whitelist-based, privacy-reduced share bundle; it is not a secret scanner, its output must be reviewed before sharing, and it cannot be replayed. See [offline evaluation tools](tests/README.md#offline-evaluation-tools).
 
 ```sh
 python3 scripts/eval_replay.py .eval-live/<run>/<agent> --case B5
 python3 scripts/eval_coverage.py .eval-live/<run>/<agent>
+python3 scripts/eval_profile.py --list-profiles
+python3 scripts/eval_profile.py .eval-live/<run>/<agent> --profile tracked-design-review
 python3 scripts/eval_sanitize.py \
   .eval-live/<run>/<agent> \
   --output-dir .eval-live/exports/example

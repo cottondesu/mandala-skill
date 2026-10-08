@@ -34,6 +34,7 @@ REPLAY_CASE_TYPE = "mandala-eval-replay-case"
 COVERAGE_TYPE = "mandala-contract-coverage"
 SANITIZED_TYPE = "mandala-sanitized-export"
 FIELD_USAGE_TYPE = "mandala-field-usage-example"
+PROFILE_REPORT_TYPE = "mandala-coverage-profile-report"
 
 GRADED_STATUSES = ("AUTO_PASS", "AUTO_FAIL", "INCONCLUSIVE")
 LIVE_STATUSES = GRADED_STATUSES + ("ENVIRONMENT_ERROR", "UNSUPPORTED", "NOT_RUN")

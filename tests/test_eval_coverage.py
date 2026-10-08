@@ -4,6 +4,7 @@ import io
 import json
 import tempfile
 import unittest
+from unittest import mock
 
 from scripts import eval_coverage
 from scripts import live_eval_artifacts as artifacts
@@ -188,6 +189,33 @@ class CoverageCliTests(unittest.TestCase):
                 self.assertEqual(eval_coverage.main([str(source), "--output-dir", str(root / "cov")]), 2)  # not empty
                 self.assertEqual(eval_coverage.main([str(source), "--output-dir", str(source / "cov")]), 2)  # inside source
                 self.assertEqual(eval_coverage.main([str(root / "missing"), "--output-dir", str(root / "cov3")]), 2)
+
+    def test_default_output_agent_prevents_path_traversal(self):
+        for value in ("codex", "claude-code", "a1"):
+            with self.subTest(valid=value):
+                self.assertEqual(eval_coverage.default_output_agent(value), value)
+        for value in ("x/../../escape", "../escape", "Codex 1", "", None):
+            with self.subTest(invalid=value):
+                self.assertEqual(eval_coverage.default_output_agent(value), "unknown")
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = root / "run" / "agent"
+            fx.write_run(source, [fx.b5_case()], summary_overrides={"agent": "x/../../escape"})
+            output_root = root / "outputs"
+
+            with mock.patch.object(artifacts, "OUTPUT_ROOT", output_root), \
+                    redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO()):
+                self.assertEqual(eval_coverage.main([str(source)]), 0)
+
+            coverage_root = output_root / "coverage"
+            outputs = sorted(path for path in coverage_root.iterdir() if path.is_dir())
+            self.assertEqual(len(outputs), 1)
+            self.assertIn("-coverage-unknown-", outputs[0].name)
+            self.assertEqual(outputs[0].resolve().parent, coverage_root.resolve())
+            self.assertTrue((outputs[0] / "coverage.json").is_file())
+            self.assertTrue((outputs[0] / "coverage.md").is_file())
+            self.assertFalse(any(path.name.startswith("escape-") for path in output_root.iterdir()))
 
 
 if __name__ == "__main__":

@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.4.0 (unreleased)
+
+- Add three curated real-world coverage profiles (`tracked-design-review`, `capacity-constrained-expansion`, `reset-recovery`) in `tests/evals/profiles.json`, validated by `make check` against the current release suite.
+- Add `scripts/eval_profile.py`, an offline post-hoc profile view over an existing live run or replay output; it runs no agent or Mandala CLI and never modifies its source.
+- Define explicit CORE / CONDITIONAL / NOT_APPLICABLE semantics, derive contract scope from current fixture declarations, and keep CORE and CONDITIONAL evidence separate; profiles report no pass rates, percentages, or scores.
+- Keep the canonical Skill, CLI contract, behavioral and activation fixtures, live suites, graders, adapters, replay, coverage, sanitizer, and existing artifact schemas unchanged.
+
 ## v0.3.0 (2026-10-08)
 
 - Harden capacity-limit responses: the Skill now says to tell the user that status changes do not create capacity, without increasing the canonical Skill size (a 6214-byte UTF-8 budget is now validated).

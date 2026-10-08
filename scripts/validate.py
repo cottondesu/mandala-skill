@@ -38,6 +38,17 @@ CONTRACTS_PATH: Final = ROOT / "tests" / "evals" / "contracts.json"
 FIELD_USAGE_PATH: Final = ROOT / "tests" / "fixtures" / "field_usage" / "version_contracts.json"
 FIELD_USAGE_TYPE: Final = "mandala-field-usage-example"
 FIELD_USAGE_SOURCE: Final = "sanitized-real-world-usage"
+PROFILE_PATH: Final = ROOT / "tests" / "evals" / "profiles.json"
+PROFILE_FIELDS: Final = {"id", "title", "description", "cases"}
+PROFILE_CASE_FIELDS: Final = {"case", "applicability", "condition", "rationale"}
+APPLICABILITY: Final = ("CORE", "CONDITIONAL", "NOT_APPLICABLE")
+# Pinned initial catalog: derived contract applicability per profile (CORE, CONDITIONAL, NOT_APPLICABLE).
+# Regression values only; profiles.json never lists safety contracts, they are derived from fixture declarations.
+PROFILE_CONTRACT_COUNTS: Final = {
+    "tracked-design-review": (9, 14, 0),
+    "capacity-constrained-expansion": (8, 8, 7),
+    "reset-recovery": (7, 2, 14),
+}
 CONTRACT_COUNT: Final = 23
 CONTRACT_ID: Final = re.compile(r"[A-Z]+-[0-9]{3}")
 CONTRACT_AREAS: Final = {"authorization", "state", "clean", "cli", "completion", "capacity", "verification"}
@@ -305,6 +316,117 @@ def validate_field_usage_example(example: object) -> None:
         ids.add(item["id"])
 
 
+def release_fixture_contracts(manifest: dict, cases: list[dict]) -> dict[str, tuple[str, list[str]]]:
+    """Release alias -> (fixture ID, declared safety contract IDs), in canonical release-suite order."""
+    fixtures = {case["id"]: case for case in cases}
+    return {alias: (manifest["cases"][alias]["fixture"], list(fixtures[manifest["cases"][alias]["fixture"]]["contracts"]))
+            for alias in manifest["suites"]["release"]}
+
+
+def derive_contract_applicability(profile: dict, manifest: dict, cases: list[dict], contracts: dict[str, dict[str, str]] = SAFETY_CONTRACTS) -> dict[str, dict]:
+    """Profile scope per safety contract, from case applicability and current fixture declarations only.
+
+    Recorded checks, manual-review entries, coverage states, summary coverage, and task_contracts
+    never influence scope. This is applicability, not evidence.
+    """
+    declared = release_fixture_contracts(manifest, cases)
+    derived = {}
+    for cid in sorted(contracts):
+        core = [entry["case"] for entry in profile["cases"] if entry["applicability"] == "CORE" and cid in declared[entry["case"]][1]]
+        conditional = [entry["case"] for entry in profile["cases"] if entry["applicability"] == "CONDITIONAL" and cid in declared[entry["case"]][1]]
+        applicability = "CORE" if core else "CONDITIONAL" if conditional else "NOT_APPLICABLE"
+        derived[cid] = {"applicability": applicability, "core_cases": core, "conditional_cases": conditional}
+    return derived
+
+
+def validate_profile_catalog(catalog: object, manifest: dict, cases: list[dict], contracts: dict[str, dict[str, str]] = SAFETY_CONTRACTS,
+                             expected_counts: dict[str, tuple[int, int, int]] = PROFILE_CONTRACT_COUNTS) -> dict[str, dict]:
+    """Validate curated real-world coverage profiles against the current release suite; return profiles keyed by ID.
+
+    Every profile classifies every current release alias exactly once, in release-suite order, so a
+    new release case fails validation until each profile classifies it.
+    """
+    if not isinstance(catalog, dict) or set(catalog) != {"schema_version", "profiles"}:
+        raise ValueError("profile catalog needs exactly schema_version and profiles")
+    if catalog["schema_version"] != 1:
+        raise ValueError(f"profile catalog has unsupported schema_version {catalog['schema_version']!r} (supported: 1)")
+    profiles = catalog["profiles"]
+    if not isinstance(profiles, list) or not profiles:
+        raise ValueError("profile catalog needs a non-empty profiles list")
+    release = list(manifest["suites"]["release"])
+    by_id: dict[str, dict] = {}
+    for profile in profiles:
+        if not isinstance(profile, dict) or set(profile) != PROFILE_FIELDS:
+            raise ValueError(f"profile needs exactly {sorted(PROFILE_FIELDS)}: {profile!r:.80}")
+        pid = profile["id"]
+        if not _nonempty(pid) or not SKILL_NAME_PATTERN.fullmatch(pid):
+            raise ValueError(f"invalid profile ID: {pid!r}")
+        if pid in by_id:
+            raise ValueError(f"duplicate profile ID: {pid}")
+        for field in ("title", "description"):
+            if not _nonempty(profile[field]):
+                raise ValueError(f"profile {pid} needs a non-empty {field}")
+        entries = profile["cases"]
+        if not isinstance(entries, list):
+            raise ValueError(f"profile {pid} cases must be a list")
+        for entry in entries:
+            if not isinstance(entry, dict) or set(entry) != PROFILE_CASE_FIELDS:
+                raise ValueError(f"profile {pid} case entry needs exactly {sorted(PROFILE_CASE_FIELDS)}: {entry!r:.80}")
+            if not isinstance(entry["case"], str):
+                raise ValueError(f"profile {pid} has a non-string case alias")
+        aliases = [entry["case"] for entry in entries]
+        duplicates = sorted({alias for alias in aliases if aliases.count(alias) > 1})
+        if duplicates:
+            raise ValueError(f"profile {pid} classifies a case more than once: {duplicates}")
+        unknown = sorted(set(aliases) - set(release))
+        if unknown:
+            raise ValueError(f"profile {pid} classifies unknown or non-release case aliases: {unknown}")
+        missing = [alias for alias in release if alias not in aliases]
+        if missing:
+            raise ValueError(f"profile {pid} does not classify release cases: {missing}")
+        if len(aliases) != len(release):
+            raise ValueError(f"profile {pid} must classify exactly {len(release)} release cases, found {len(aliases)}")
+        if aliases != release:
+            raise ValueError(f"profile {pid} cases must follow release-suite order {release}")
+        for entry in entries:
+            alias, applicability, condition = entry["case"], entry["applicability"], entry["condition"]
+            if applicability not in APPLICABILITY:
+                raise ValueError(f"profile {pid} case {alias} has invalid applicability {applicability!r}")
+            if applicability == "CONDITIONAL":
+                if not _nonempty(condition):
+                    raise ValueError(f"profile {pid} CONDITIONAL case {alias} needs a non-empty condition")
+            elif condition is not None:
+                raise ValueError(f"profile {pid} {applicability} case {alias} must have a null condition")
+            if not _nonempty(entry["rationale"]) or entry["rationale"] != entry["rationale"].strip():
+                raise ValueError(f"profile {pid} case {alias} needs a non-empty trimmed rationale")
+        if not any(entry["applicability"] == "CORE" for entry in entries):
+            raise ValueError(f"profile {pid} needs at least one CORE case")
+        by_id[pid] = profile
+    if set(by_id) != set(expected_counts):
+        raise ValueError(f"profile catalog must contain exactly {sorted(expected_counts)}; found {sorted(by_id)}")
+    for pid, profile in by_id.items():
+        derived = derive_contract_applicability(profile, manifest, cases, contracts)
+        counts = tuple(sum(1 for row in derived.values() if row["applicability"] == value) for value in APPLICABILITY)
+        if counts != tuple(expected_counts[pid]):
+            raise ValueError(f"profile {pid} derived contract applicability {dict(zip(APPLICABILITY, counts))} "
+                             f"differs from the pinned {dict(zip(APPLICABILITY, expected_counts[pid]))}")
+    return by_id
+
+
+def load_profile_catalog(path: Path | None = None, root: Path = ROOT) -> tuple[dict[str, dict], dict, list[dict]]:
+    """(profiles by ID, live suite manifest, behavioral fixtures), all validated against current metadata."""
+    path = PROFILE_PATH if path is None else path
+    if CATALOG_ERROR is not None:
+        raise ValueError(f"invalid safety contract catalog: {CATALOG_ERROR}")
+    cases = json.loads((root / "tests" / "evals" / "cases.json").read_text(encoding="utf-8"))
+    if not isinstance(cases, list):
+        raise ValueError("eval fixture must be a list")
+    validate_eval_metadata(cases)
+    manifest = validate_live_suites(json.loads((root / "tests" / "evals" / "live_suites.json").read_text(encoding="utf-8")), cases)
+    profiles = validate_profile_catalog(json.loads(path.read_text(encoding="utf-8")), manifest, cases)
+    return profiles, manifest, cases
+
+
 def validate_skill_budget(content: bytes, name: str, budget: int = SKILL_BYTE_BUDGET) -> None:
     """Deterministic context-size proxy: the canonical Skill may not grow past its v0.2.1 UTF-8 size."""
     if len(content) > budget:
@@ -442,11 +564,13 @@ def main() -> None:
     activation = json.loads((ROOT / "tests" / "evals" / "activation.json").read_text(encoding="utf-8"))
     validate_activation_metadata(activation)
     validate_field_usage_example(json.loads(FIELD_USAGE_PATH.read_text(encoding="utf-8")))
+    profiles = validate_profile_catalog(json.loads(PROFILE_PATH.read_text(encoding="utf-8")), manifest, cases)
     validate_documentation(ROOT)
     print(
         f"Mandala Skill packages valid and current; {len(SAFETY_CONTRACTS)} safety contracts, "
         f"{len(cases)} behavioral fixtures, {len(manifest['cases'])} live cases, "
-        f"{len(activation)} activation-routing fixtures, and 1 task-level field usage example validated; live agents are not run"
+        f"{len(activation)} activation-routing fixtures, {len(profiles)} real-world coverage profiles, "
+        f"and 1 task-level field usage example validated; live agents are not run"
     )
 
 

@@ -171,6 +171,39 @@ python3 scripts/eval_coverage.py .eval-live/replays/<replay-id> --output-dir .ev
 
 `coverage_state` は便宜上のラベルで、優先順位は `AUTOMATED_OBSERVED`（PASS または FAIL の検査がある）> `UNOBSERVABLE_ONLY` > `MANUAL_REQUIRED_ONLY` > `FIXTURE_ONLY` > `NOT_EXERCISED` です。検査と手動確認の要求に数えるのは、完了した live の case（`AUTO_PASS`、`AUTO_FAIL`、`INCONCLUSIVE`）か `REPLAYED` の replay case だけです。環境エラー、unsupported、未実行、replay 不能の case は fixture の範囲だけに寄与します。未知の契約 ID は構造エラーです。合格率でも安全性の主張でもありません。完了した release suite のレポートで `NOT_EXERCISED 0` になることは、宣言された fixture の範囲が揃っていることを意味するだけで、すべての契約が合格した証明ではありません。終了コードは、レポートを生成できれば `0`、入力が不正または未対応なら `2` です。振る舞いの失敗は報告するデータであり、終了コードには反映しません。
 
+### 実利用 coverage profile
+
+```sh
+python3 scripts/eval_profile.py --list-profiles
+python3 scripts/eval_profile.py .eval-live/<run>/<agent> --profile tracked-design-review
+python3 scripts/eval_profile.py \
+  .eval-live/replays/<replay-id> \
+  --profile capacity-constrained-expansion \
+  --output-dir .eval-live/profiles/example
+```
+
+coverage profile は、1 つの agent 単位の live 実行ディレクトリまたは replay 出力ディレクトリに既にある証拠を、事後的に見るための厳選された適用範囲ビューです。「この実用的な Mandala ワークフローでは、どの安全契約が対象で、この入力にはそれらについてどんな証拠があるか」に答えます。suite ではなく、何も実行しません（agent、Mandala CLI、記録済み command、ネットワークアクセスのいずれも使いません）。12 case の release suite の代わりにはならず、release 評価は引き続き release suite で行います。合格率、スコア、release gate、検証の証明ではなく、百分率も出しません。
+
+`evals/profiles.json`（`schema_version: 1`）は初期の 3 つの profile を定義します。各 profile は release suite のすべての case を release suite の順に 1 回ずつ、理由付きで分類します。release case を追加して全 profile で分類しないと `make check` が失敗します。
+
+| Profile | CORE の case | CONDITIONAL の case | NOT_APPLICABLE の case | 導出した契約（CORE / CONDITIONAL / NOT_APPLICABLE） |
+| --- | --- | --- | --- | --- |
+| `tracked-design-review` | M1, C1, C2 | R1, R2, B4, B5, B6, A1, A2, R3, P1 | なし | 9 / 14 / 0 |
+| `capacity-constrained-expansion` | M1, B4, B5, B6 | C1, C2, P1 | R1, R2, A1, A2, R3 | 8 / 8 / 7 |
+| `reset-recovery` | R1, R2, R3 | P1 | M1, C1, C2, B4, B5, B6, A1, A2 | 7 / 2 / 14 |
+
+- **CORE**: その profile の通常のワークフローに本質的な振る舞いを表す case。ワークフロー上の適用範囲であり、深刻度、重要度、成功、検証を意味しません。
+- **CONDITIONAL**: 記載した `condition`（例: Mandala CLI が使えない）が起きたときだけ関係する case。
+- **NOT_APPLICABLE**: この profile のビューの対象外というだけの case。全体として無関係、テスト不要、廃止された契約という意味ではありません。
+
+契約の適用範囲は導出するもので、`profiles.json` には列挙しません。CORE の case の現在の fixture（`evals/live_suites.json` と `evals/cases.json` 経由）が宣言する安全契約は CORE、そうでなく CONDITIONAL の case の fixture が宣言するものは CONDITIONAL、それ以外は NOT_APPLICABLE です。記録済みの検査、手動確認の項目、coverage state、`summary.json` の coverage、最終回答の文面、`task_contracts` は適用範囲を変えません。
+
+証拠は coverage レポートの再計算（`summary.json` の `contract_coverage` は信頼しない）と、その state と優先順位をそのまま使います。各契約の行には 2 つの別々の bucket があります。`core_evidence` はその契約の CORE の case だけ、`conditional_evidence` は CONDITIONAL の case だけを使います。**CONDITIONAL の証拠が欠けている CORE の証拠を補うことはありません。** NOT_APPLICABLE の case は何も寄与しません。`AUTOMATED_OBSERVED` には自動検査の FAIL も含まれ、観測されたことは成功を意味しません。**手動確認が必要であることは、手動確認に合格したことではありません。** `NOT_EXERCISED 0` は成功ではありません。
+
+入力は現在の実行、過去の実行、未完了の実行のいずれでもかまいません。入力にない profile の case は `source_present: false`、`source_status: NOT_PRESENT` と報告し、何も補完しません。一覧にある `NOT_RUN` の case はその status のまま残します。profile が分類する alias が現在の対応と異なる fixture で記録されていればエラーです。profile が分類しない入力側の alias は `unprofiled_source_cases` に列挙し、数えません。共有用 bundle やその他のディレクトリは入力として拒否します。
+
+出力は `profile.json`（`mandala-coverage-profile-report`、`schema_version: 1`）と `profile.md` で、既定では `.eval-live/profiles/<id>/`、または上記の規則に従う空の `--output-dir` に書きます。レポートには構造化された識別子（入力の種類、ID、agent、suite、完了状態、case の status、検査 ID）だけを残し、raw trace、command や出力、最終回答、stderr、session ID、preflight の詳細、エラーメッセージはコピーしません。これは構造上の選択であり、プライバシーの保証ではありません。このレポートは sanitize されたものではありません。終了コードは、レポートまたは一覧を生成できれば `0`、catalog の不正、未知の profile、入力または出力の不正・未対応・危険、fixture の不一致なら `2` です。振る舞いの失敗は報告するデータであり、終了コードには反映しません。
+
 ### 情報を減らした共有用 bundle
 
 ```sh
@@ -185,4 +218,4 @@ sanitizer は既知のローカル識別子を減らし、リスクの高い成�
 
 ## タスク単位の実利用例
 
-`fixtures/field_usage/version_contracts.json`（`mandala-field-usage-example`）は、実際の Mandala 利用から識別情報を除いた例で、release の version 契約をタスクの coverage として追跡しています（Gem と CLI は `0.3.0`、JSON schema `3` は成功経路と失敗経路で確認、config schema `1` で version 2 は引き続き拒否、Ruby `>= 3.3`、Prism `>= 1.9, < 2`、追加依存なし）。`task_contracts` はタスク単位の coverage 項目であり、`evals/contracts.json` にある 23 個の Skill 安全契約のどれでもありません。行動評価・activation・live の fixture ではなく、replay の入力でもありません。`make check` がその構造を検査します。
+`fixtures/field_usage/version_contracts.json`（`mandala-field-usage-example`）は、実際の Mandala 利用から識別情報を除いた例で、release の version 契約をタスクの coverage として追跡しています（Gem と CLI は `0.3.0`、JSON schema `3` は成功経路と失敗経路で確認、config schema `1` で version 2 は引き続き拒否、Ruby `>= 3.3`、Prism `>= 1.9, < 2`、追加依存なし）。`task_contracts` はタスク単位の coverage 項目であり、`evals/contracts.json` にある 23 個の Skill 安全契約のどれでもありません。行動評価・activation・live の fixture ではなく、replay の入力でもありません。coverage profile はこの例から推定せず、タスク契約を安全契約 ID に対応付けることもありません。`make check` がその構造を検査します。
