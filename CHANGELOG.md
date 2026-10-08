@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.5.0 (unreleased)
+## v0.5.0 (2026-10-09)
 
 - Move the tested CLI baseline from Mandala CLI v0.3.0 to **Mandala CLI v0.4.0** (release commit `2fd15fb1ae32d0e13b6d9a1ed8107eb3f3a9deb9`, Go 1.26 or later): `go install github.com/cottondesu/mandala/cmd/mandala@v0.4.0`, then `mandala --version` printing `mandala v0.4.0`. v0.3.0 remains the historical baseline of mandala-skill v0.1.0 through v0.4.1.
 - Document `mandala --project <project-root> status --json` in the CLI contract: status output schema `1`, field meanings and order, count invariants, exit `0`/`1`/`2` (exit `1` still prints valid JSON), read-only and deterministic output, `--json` as a `status` command-local flag, and unchanged text `status` with `--json=false`.
