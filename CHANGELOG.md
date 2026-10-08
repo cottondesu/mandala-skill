@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.5.0 (unreleased)
+
+- Move the tested CLI baseline from Mandala CLI v0.3.0 to **Mandala CLI v0.4.0** (release commit `2fd15fb1ae32d0e13b6d9a1ed8107eb3f3a9deb9`, Go 1.26 or later): `go install github.com/cottondesu/mandala/cmd/mandala@v0.4.0`, then `mandala --version` printing `mandala v0.4.0`. v0.3.0 remains the historical baseline of mandala-skill v0.1.0 through v0.4.1.
+- Document `mandala --project <project-root> status --json` in the CLI contract: status output schema `1`, field meanings and order, count invariants, exit `0`/`1`/`2` (exit `1` still prints valid JSON), read-only and deterministic output, `--json` as a `status` command-local flag, and unchanged text `status` with `--json=false`.
+- Keep roles separate: `show --json` remains the pre-mutation inspection and `gaps --required --json` remains the completion gate; `status --json` is an optional progress summary and never replaces either. The canonical Skill changes only its baseline version and stays within the 6214-byte budget; all 23 safety contracts are unchanged.
+- Validate the new baseline: any other versioned CLI baseline token (including `cmd/mandala@latest`) in the Skill package, READMEs, installation guides, and evaluation guides is rejected, the `status --json` contract clauses are required, and global `--json` placement and common phrasings that offer `status --json` as a completion-gate substitute are rejected (a wording tripwire, not a semantic proof).
+- Add `scripts/check_cli_compat.py` (`make cli-compat`), an explicit real-CLI compatibility check (`C01`–`C14`) that uses an installed CLI in disposable projects, never installs it, and reports a missing CLI or another version as `NOT_RUN`. It is not part of `make release-check` or CI.
+- Update the live-evaluation preflight to require `mandala v0.4.0`; the 12 release cases, 3 coverage profiles, graders, adapters, and artifact schemas are otherwise unchanged.
+
+## v0.4.1 (2026-10-08)
+
+- Improve Go binary `PATH` troubleshooting in the English and Japanese installation guides: locate the binary through `GOBIN` or the first `GOPATH` entry, check `go env` exit status, verify absolute paths in Windows PowerShell, and explain `PATH` differences for agents started from desktop apps or IDEs. The CLI is still never installed automatically.
+
 ## v0.4.0 (2026-10-08)
 
 - Add three curated real-world coverage profiles (`tracked-design-review`, `capacity-constrained-expansion`, `reset-recovery`) in `tests/evals/profiles.json`, validated by `make check` against the current release suite.

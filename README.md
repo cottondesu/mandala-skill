@@ -6,7 +6,7 @@ This Skill is distributed by manual copy. Review the Skill instructions before i
 
 ## Prerequisites and compatibility
 
-Install Mandala CLI separately and make `mandala` available on `PATH`. Check availability and version with `mandala --version`; the tested release reports `mandala v0.3.0`. The tested baseline for this Skill is **Mandala CLI v0.3.0**; compatibility with other releases is not yet declared. [CLI installation](docs/INSTALLATION.md#install-the-cli) includes the pinned command `go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0`. Use `mandala --help` or `mandala <command> --help` for command syntax discovery.
+Install Mandala CLI separately and make `mandala` available on `PATH`. Check availability and version with `mandala --version`; the tested release reports `mandala v0.4.0`. The tested baseline for this Skill is **Mandala CLI v0.4.0**; compatibility with other releases is not yet declared. [CLI installation](docs/INSTALLATION.md#install-the-cli) includes the pinned command `go install github.com/cottondesu/mandala/cmd/mandala@v0.4.0`. Use `mandala --help` or `mandala <command> --help` for command syntax discovery.
 
 ## Supported agents and installation
 
@@ -32,6 +32,8 @@ See the [installation guide](docs/INSTALLATION.md) for all four destinations, Wi
 
 Try an explicit request such as: “Use the mandala skill to track coverage for this task.” The agent checks the CLI and current state before writing. Skill auto-selection alone does not authorize state creation or changes. Mandala records a goal, facets, and required or optional leaf cells; `status` and `gaps` report unresolved declared required leaves.
 
+For an interim progress summary, `mandala --project <project-root> status --json` prints read-only required and optional leaf counts; exit `1` (required gaps remain) still prints valid JSON. It is optional, not a per-turn requirement: `show --json` remains the inspection before any state change, and `gaps --required --json` lists the remaining required leaf IDs. `status --json` does not replace `gaps --required --json` as the completion gate. See the [CLI contract](src/mandala/references/cli-contract.md#status-json) for the schema.
+
 `.mandala/` belongs to the CLI. The Skill instructs agents never to edit `state.json`, add notes or ledgers there, change `.gitignore` or Git exclude directly, or automatically run `clean`. Zero required gaps means the **currently declared** required leaves are resolved. It is not proof of comprehensive coverage or verified completion.
 
 ## Development
@@ -50,6 +52,8 @@ make release-check
 Build, validation, and tests use the Python standard library and require no network. `make check` validates package integrity, the 23 safety contracts in active instruction prose (stable IDs such as `STATE-001` in `tests/evals/contracts.json`), the Agent Skills `name`/`description` metadata constraints, a 6214-byte UTF-8 size budget for the canonical `SKILL.md` (a deterministic context-size proxy, not a tokenizer-specific token budget), behavioral fixture metadata in `tests/evals/cases.json`, and activation-routing fixture metadata in `tests/evals/activation.json`, the live-suite manifest in `tests/evals/live_suites.json`, and the real-world coverage profile catalog in `tests/evals/profiles.json`. They do not run Codex or Claude Code or establish live agent behavior. Run the [manual behavioral evaluation](tests/README.md) before release. Do not edit `dist/` directly.
 
 `make release-check` runs `make build`, `make check`, and `make test` in order, then local Git hygiene checks: `git diff --check`, no tracked generated or cache files, `dist/mandala/` ignored by the tracked `.gitignore`, and no stale split-distribution layout references. It allows uncommitted changes, does not run live agents, and does not publish a release.
+
+`make cli-compat` (optionally `MANDALA=/absolute/path/to/mandala`) runs the real-CLI compatibility cases `C01`–`C14` against an already installed Mandala CLI v0.4.0 in disposable projects. It never installs the CLI, reports a missing CLI or another version as `NOT_RUN` rather than a pass, and is not part of `make release-check` or CI. See [Real CLI compatibility check](tests/README.md#real-cli-compatibility-check).
 
 The local live-agent harness runs twelve high-risk scenarios (suites `focused`, `capacity`, `boundaries`, and `release` for all twelve) against Codex or Claude Code in disposable projects and checks command traces and Mandala state. The release suite's declared fixture scope covers all 23 safety contracts; that is declared scope, not proof that each contract was automatically verified. It runs only when invoked, never in CI, and needs the agent CLI's own login. Automated passes do not replace manual response review. See the [live evaluation guide](tests/README.md#live-agent-evaluation-harness).
 

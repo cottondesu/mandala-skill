@@ -376,7 +376,7 @@ class BoundaryReplayTests(ReplayTestCase):
         r3.events = [event for event in r3.events if not (event.get("phase") == "snapshot" and event["turn"] == 1)]
         r3.snapshot(1, stdout=fx.NO_PROJECT, exit_code=2)
         p1 = fx.p1_case("AUTO_FAIL")
-        p1.agent(1, "go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0", 1, "")
+        p1.agent(1, "go install github.com/cottondesu/mandala/cmd/mandala@v0.4.0", 1, "")
         code, output = self.replay(self.run_dir([r3, p1]))
         self.assertEqual(code, 1)
         r3_checks = {item["id"]: item["status"] for item in case_result(output, "R3")["checks"]}

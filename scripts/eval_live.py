@@ -42,7 +42,7 @@ SCHEMA_VERSION = 1
 CANONICAL = ROOT / "src" / "mandala"
 GENERATED = ROOT / "dist" / "mandala"
 OUTPUT_ROOT = ROOT / ".eval-live"
-REQUIRED_CLI = "mandala v0.3.0"
+REQUIRED_CLI = "mandala v0.4.0"
 DEFAULT_TIMEOUT = 300.0
 PLACEHOLDER = "<project-root>"
 

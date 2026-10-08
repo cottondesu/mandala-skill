@@ -6,7 +6,7 @@
 
 ## 前提条件と互換性
 
-Mandala CLI を別途インストールし、`mandala` を `PATH` から実行できるようにしてください。実行可否とバージョンの確認には `mandala --version` を使い、検証対象の release では `mandala v0.3.0` と表示されます。この Skill で検証した基準は **Mandala CLI v0.3.0** です。他のバージョンとの互換範囲はまだ定義していません。[CLI の導入手順](docs/INSTALLATION.ja.md#cli-のインストール)には固定コマンド `go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0` があります。構文の確認には `mandala --help` または `mandala <command> --help` を使います。
+Mandala CLI を別途インストールし、`mandala` を `PATH` から実行できるようにしてください。実行可否とバージョンの確認には `mandala --version` を使い、検証対象の release では `mandala v0.4.0` と表示されます。この Skill で検証した基準は **Mandala CLI v0.4.0** です。他のバージョンとの互換範囲はまだ定義していません。[CLI の導入手順](docs/INSTALLATION.ja.md#cli-のインストール)には固定コマンド `go install github.com/cottondesu/mandala/cmd/mandala@v0.4.0` があります。構文の確認には `mandala --help` または `mandala <command> --help` を使います。
 
 ## 対応エージェントと導入先
 
@@ -32,6 +32,8 @@ cp -R src/mandala ~/.codex/skills/
 
 たとえば「この作業の coverage を mandala skill で追跡してください」と明示的に依頼します。エージェントは書き込み前に CLI と現在の状態を確認します。Skill が自動選択されただけでは、状態の作成や変更は許可されません。Mandala は目標、facet、required / optional の leaf cell を記録し、`status` と `gaps` が未解決の宣言済み required leaf を報告します。
 
+途中経過の集計には `mandala --project <project-root> status --json` を使えます。状態を変更せずに required / optional の leaf 数を出力し、required gap が残る exit `1` でも有効な JSON を出力します。毎ターンの必須手順ではありません。状態を変更する前の確認は引き続き `show --json`、残っている required leaf の ID は `gaps --required --json` で確認します。`status --json` は完了判定の `gaps --required --json` の代わりにはなりません。schema は [CLI 契約](src/mandala/references/cli-contract.md#status-json)を参照してください。
+
 `.mandala/` は CLI の管理領域です。Skill は `state.json` の直接編集、そこへのメモや台帳の追加、`.gitignore` や Git exclude の直接変更、`clean` の自動実行を禁止します。required gap が 0 でも、**現在宣言されている** required leaf が解決したことだけを意味します。網羅性や実作業の完了が証明されたわけではありません。
 
 ## 開発
@@ -50,6 +52,8 @@ make release-check
 build、validation、test は Python 標準ライブラリだけで動き、ネットワークは不要です。`make check` は package の整合性、有効な指示文にある 23 個の安全契約（`tests/evals/contracts.json` の `STATE-001` などの固定 ID）、Agent Skills の `name`/`description` metadata 制約、正本 `SKILL.md` の 6214 UTF-8 バイトのサイズ上限（決定的に測れる context サイズの目安で、特定の tokenizer の token 数ではありません）、`tests/evals/cases.json` の行動評価 fixture metadata、`tests/evals/activation.json` の activation routing fixture metadata、`tests/evals/live_suites.json` の live suite 定義、`tests/evals/profiles.json` の実利用 coverage profile 定義を検査します。Codex / Claude Code を起動したり、実際の agent behavior を保証したりはしません。release 前に[手動の行動評価](tests/README.ja.md)を実施してください。`dist/` を直接編集しないでください。
 
 `make release-check` は `make build`、`make check`、`make test` を順番に実行した後、ローカルの Git hygiene（`git diff --check`、生成物や cache が tracked でないこと、`dist/mandala/` が tracked の `.gitignore` で ignore されていること、古い分割配布 layout への参照がないこと）を検査します。未 commit の変更があっても実行でき、live agent は起動せず、release も公開しません。
+
+`make cli-compat`（必要に応じて `MANDALA=/absolute/path/to/mandala`）は、導入済みの Mandala CLI v0.4.0 に対して実 CLI 互換性 case `C01`–`C14` を使い捨て project で実行します。CLI を導入することはなく、CLI がない場合や別の version の場合は PASS ではなく `NOT_RUN` と報告します。`make release-check` と CI には含まれません。詳しくは[実 CLI 互換性チェック](tests/README.ja.md#実-cli-互換性チェック)を参照してください。
 
 ローカルの live-agent harness は、重要度の高い 12 のシナリオ（suite は `focused`、`capacity`、`boundaries`、12 件すべての `release`）を使い捨て project 上で Codex または Claude Code に実行させ、command trace と Mandala state を検査します。release suite の fixture が宣言する範囲は 23 個の安全契約すべてを含みますが、これは宣言された範囲であり、各契約が自動で検証された証明ではありません。明示的に実行したときだけ動き、CI では実行せず、各 agent CLI 自身のログインが必要です。自動判定の合格は手動の応答確認の代わりにはなりません。詳しくは[live 評価ガイド](tests/README.ja.md#live-agent-評価-harness)を参照してください。
 

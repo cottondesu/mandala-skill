@@ -7,13 +7,13 @@ This repository distributes Agent Skill instructions by manual copy. `src/mandal
 Mandala CLI is a separate prerequisite and is not downloaded by the Skill. With Go installed, the primary installation command is:
 
 ```sh
-go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0
+go install github.com/cottondesu/mandala/cmd/mandala@v0.4.0
 mandala --version
 ```
 
-Expected version output: `mandala v0.3.0` (exit `0`). Run `mandala --version` alone, without a project option or command. This checks CLI availability and build version; use `mandala --help` or `mandala <command> --help` for syntax discovery.
+Expected version output: `mandala v0.4.0` (exit `0`). Run `mandala --version` alone, without a project option or command. This checks CLI availability and build version; use `mandala --help` or `mandala <command> --help` for syntax discovery.
 
-The Skill baseline is Mandala CLI v0.3.0. A newer release installed with `@latest` may not have been validated against this Skill. Ensure your Go binary directory is on `PATH` (see [If `mandala` is not found](#if-mandala-is-not-found)). Consult the [Mandala CLI repository](https://github.com/cottondesu/mandala) for its Go requirement and CLI setup. A local development build may report `mandala (devel)` instead; that does not confirm the released baseline.
+The Skill baseline is Mandala CLI v0.4.0, which requires Go 1.26 or later to build. A newer release installed with `@latest` may not have been validated against this Skill. Ensure your Go binary directory is on `PATH` (see [If `mandala` is not found](#if-mandala-is-not-found)). Consult the [Mandala CLI repository](https://github.com/cottondesu/mandala) for its Go requirement and CLI setup. A local development build may report `mandala (devel)` instead; that does not confirm the released baseline.
 
 ### If `mandala` is not found
 
@@ -62,16 +62,16 @@ fi
 
 How to read the result:
 
-- `mandala v0.3.0`: the CLI is installed; only `PATH` is missing. Continue below.
+- `mandala v0.4.0`: the CLI is installed; only `PATH` is missing. Continue below.
 - `No mandala in ...`: the CLI is not in Go's binary directory. Run the pinned `go install` command above (check its output for errors).
 - `exists but is not an executable file`: check the file, its permissions, and that it was built for this OS and CPU. Reinstalling with the pinned command is usually simpler than editing permissions.
-- Another version, or `mandala (devel)`: this binary is not the tested v0.3.0 baseline. Reinstall with the pinned command if you want the baseline.
+- Another version, or `mandala (devel)`: this binary is not the tested v0.4.0 baseline. Reinstall with the pinned command if you want the baseline.
 - Go is not on `PATH`: install Go (or fix Go's own `PATH` setup) first.
 - `Error: go env ... failed`: Go could not report its settings, so no directory is guessed and the CLI is not run. Run `go env GOBIN` or `go env GOPATH` to see Go's error and fix the Go setup first.
 
 Running the binary by absolute path confirms only that this file runs and which version it reports. It does not verify where the binary came from or that it is authentic.
 
-**Current shell only.** If the absolute-path check printed `mandala v0.3.0`, add the directory to `PATH` for this terminal session, in the same shell where `GO_BIN` was set:
+**Current shell only.** If the absolute-path check printed `mandala v0.4.0`, add the directory to `PATH` for this terminal session, in the same shell where `GO_BIN` was set:
 
 ```sh
 export PATH="$GO_BIN:$PATH"
@@ -137,7 +137,7 @@ if ($GoBin) {
 
 The check accepts only fully qualified paths: a drive path such as `C:\Users\name\go\bin` or a UNC path such as `\\server\share\go\bin`. It rejects an empty value, drive-relative paths (`C:go\bin`), root-relative paths (`\go\bin`), relative paths, and paths with characters Windows does not allow; `\\?\` device paths are not accepted. It builds paths as plain strings, so a missing drive or share is reported as not found. It is written for both Windows PowerShell 5.1 and PowerShell 7.
 
-Read the result as on macOS/Linux. `&` runs the program at that path, including paths with spaces. If it printed `mandala v0.3.0`, add the directory for the current PowerShell session only:
+Read the result as on macOS/Linux. `&` runs the program at that path, including paths with spaces. If it printed `mandala v0.4.0`, add the directory for the current PowerShell session only:
 
 ```powershell
 $env:Path = "$GoBin;$env:Path"
@@ -228,7 +228,7 @@ New-Item -ItemType Directory -Force "$ProjectRoot/.claude/skills" | Out-Null
 Copy-Item -Recurse "src/mandala" "$ProjectRoot/.claude/skills/"
 ```
 
-The CLI prerequisite is the same in PowerShell: `go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0`, then `mandala --version` after Go's binary directory is on `PATH`. Expect `mandala v0.3.0`. If `mandala` is not found, see [Find the CLI in Windows PowerShell](#find-the-cli-in-windows-powershell).
+The CLI prerequisite is the same in PowerShell: `go install github.com/cottondesu/mandala/cmd/mandala@v0.4.0`, then `mandala --version` after Go's binary directory is on `PATH`. Expect `mandala v0.4.0`. If `mandala` is not found, see [Find the CLI in Windows PowerShell](#find-the-cli-in-windows-powershell).
 
 ## Verify
 
@@ -258,9 +258,10 @@ To remove the Skill, delete only its installed `mandala` directory. These operat
 - `go env GOBIN` is empty: Go uses the `bin` directory under the first `GOPATH` entry.
 - A custom `GOBIN` is set: add that directory, not `~/go/bin`, to `PATH`.
 - `mandala` exists but does not run: check that it is a regular file, that it is executable, and that it was built for this OS and CPU.
-- `mandala --version` reports a version other than `mandala v0.3.0`: that binary is not the tested baseline; reinstall with the pinned command if you need the baseline.
+- `mandala --version` reports a version other than `mandala v0.4.0`: that binary is not the tested baseline; reinstall with the pinned command if you need the baseline.
 - `mandala` works in a terminal but not in the agent: the agent's environment has a different `PATH`; see [Agents started from desktop apps or IDEs](#agents-started-from-desktop-apps-or-ides).
 - `go` itself is not found: install and configure Go first, following the [Mandala CLI repository](https://github.com/cottondesu/mandala).
 - The Skill is not discovered: confirm the destination spelling and both package files, then start a new session.
 - An existing Mandala project conflicts with the requested goal: inspect its state first; do not reset it through `clean` or direct file edits.
 - `mandala gaps` exits `1`: required gaps remain. This is an expected result, not a CLI crash. Exit `2` signals an error.
+- `mandala status --json` exits `1`: required gaps remain and stdout still holds valid JSON with `required_gaps` greater than zero; parse it instead of treating it as a crash. `--json` is a `status` option, so write `mandala --project <project-root> status --json`; placing `--json` before the command fails with exit `2`. `status --json` does not replace `gaps --required --json` as the completion gate.

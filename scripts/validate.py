@@ -72,10 +72,125 @@ LIVE_SUITES: Final = {
     "capacity": ("B4", "B5", "B6"),
     "boundaries": ("A1", "A2", "R3", "P1"),
 }
-CLI_BASELINE: Final = "Mandala CLI v0.3.0"
+CLI_BASELINE: Final = "Mandala CLI v0.4.0"
 CLI_CHECK: Final = "mandala --version"
-VERSION_OUTPUT: Final = "mandala v0.3.0"
-PINNED_INSTALL = "go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0"
+VERSION_OUTPUT: Final = "mandala v0.4.0"
+PINNED_INSTALL = "go install github.com/cottondesu/mandala/cmd/mandala@v0.4.0"
+# Every versioned CLI baseline token in validated text must name the current baseline.
+# History (older baselines) belongs in CHANGELOG.md, which is not validated here.
+BASELINE_TOKENS: Final = (
+    (re.compile(r"Mandala CLI (v[0-9][0-9A-Za-z.+-]*)"), "v0.4.0"),
+    (re.compile(r"(?<![\w-])[Mm]andala (v[0-9][0-9A-Za-z.+-]*)"), "v0.4.0"),
+    (re.compile(r"cmd/mandala@([^\s`'\"<>)）]+)"), "v0.4.0"),
+)
+# Sentence punctuation after a version is not part of it.
+TOKEN_TRAILING: Final = ".,;:!?。、"
+STATUS_JSON_EXAMPLE: Final = (
+    '{"schema_version":1,"goal":"Implement OAuth","cells":6,"groups":1,'
+    '"required":{"open":2,"done":1,"na":0},"optional":{"open":1,"done":1,"na":0},"required_gaps":2}'
+)
+# CLI contract clauses for `status --json` (v0.4.0); exact text keeps the contract from silently drifting.
+STATUS_JSON_CONTRACT: Final = (
+    "| `status` | `status [--json]` prints counts and required gap count; exit `1` means required gaps remain. |",
+    "mandala --project /path/to/project status --json",
+    "`--json` is a `status` command-local flag placed after the command",
+    "`--json=false` keeps the text output byte-for-byte identical to plain `status`",
+    STATUS_JSON_EXAMPLE,
+    "| `schema_version` | Integer status output schema version, `1`; distinct from the state schema version. |",
+    "| `groups` | Expanded parents (cells with children). |",
+    "| `required`, `optional` | Objects with integer `open`, `done`, and `na` counts of **leaf** cells only. |",
+    "| `required_gaps` | Open required leaves; always equal to `required.open`. |",
+    "`cells` equals `groups` plus the six leaf counts",
+    "Exit `1` still prints valid JSON; parse it as a domain result, not a crash.",
+    "`status` never changes state; identical state yields byte-identical output.",
+    "`gaps --required --json` lists open required leaf IDs and remains the completion gate.",
+    "`status --json`, including `required_gaps: 0`, does not replace `show --json` before mutations or `gaps --required --json` before a completion claim",
+)
+# `--json` is command-local: before `status` it is an unknown global flag (E_USAGE, exit 2).
+GLOBAL_STATUS_JSON: Final = re.compile(r"--json(?:=\S*)?\s+(?:--project[= ]\S+\s+)?status\b")
+# A wording tripwire, not a semantic proof. Within sentences that mention `status --json` or
+# `required_gaps`, each clause is checked on its own: a negation only excuses a substitute phrase
+# in the same clause (English: before it; Japanese: after it), so "X does not replace show --json,
+# but X replaces gaps --required --json" is still rejected.
+GAPS_COMMAND: Final = r"`?(?:mandala\s+(?:--project\s+\S+\s+)?)?gaps"
+# (pattern, needs the clause's own subject): "is the completion gate" and "proves completion"
+# describe their grammatical subject, so a clause about `gaps`/`show --json` does not trip them.
+STATUS_GATE_SUBSTITUTES: Final = (
+    (re.compile(r"\b(?:instead of|in place of|rather than)\s+" + GAPS_COMMAND, re.IGNORECASE), False),
+    (re.compile(r"\breplac\w*\s+" + GAPS_COMMAND, re.IGNORECASE), False),
+    (re.compile(r"\b(?:as|is|serves as|satisf\w*|replac\w*)\s+(?:the|a)\s+completion gate", re.IGNORECASE), True),
+    (re.compile(r"\bproves?\b.*complet", re.IGNORECASE), True),
+    (re.compile(r"の代わりに(?:完了|使)|で完了判定(?:を|が)(?:行|でき)"), False),
+)
+STATUS_GATE_SUBJECT: Final = re.compile(r"status --json|required_gaps")
+NEGATION_BEFORE: Final = re.compile(r"\b(?:not|never|cannot|no longer|neither|nor|avoid)\b|n't\b", re.IGNORECASE)
+NEGATION_AFTER_JA: Final = re.compile(r"ません|ない|ず")
+# Negation is local: English must directly precede the negated verb (within two words; longer forms such as
+# "cannot by itself replace" are a known limit); prepositional phrases ("as the completion gate", "instead of
+# gaps") are negated through their governing verb. Japanese must follow the phrase closely.
+NEGATION_WINDOW_WORDS: Final = 2
+NEGATION_WINDOW_JA: Final = 20
+GOVERNING_VERB: Final = re.compile(r"\b(?:replac|us|serv|treat|run|rel(?:y|ies|ied)\b)\w*\s", re.IGNORECASE)
+PREPOSITIONAL_PHRASE: Final = re.compile(r"(?:as|instead of|in place of|rather than)\b", re.IGNORECASE)
+
+
+def negated(before: str, after: str, phrase: str) -> bool:
+    """True when the substitute phrase itself is negated, not merely when a clause contains a negation."""
+    anchor = before
+    if PREPOSITIONAL_PHRASE.match(phrase):
+        verbs = list(GOVERNING_VERB.finditer(before))
+        if verbs:
+            anchor = before[:verbs[-1].start()]
+    window = " ".join(anchor.split()[-NEGATION_WINDOW_WORDS:])
+    # A predicate followed by るが joins a new (potentially unrelated) clause.
+    # Do not let its later negation excuse "の代わりに使える".
+    nearby_ja = re.split(r"[（(]|(?<=る)が", after, maxsplit=1)[0][:NEGATION_WINDOW_JA]
+    return bool(NEGATION_BEFORE.search(window) or NEGATION_AFTER_JA.search(nearby_ja))
+# Sentences end at terminal punctuation, 。, or a blank line; a single newline only breaks a clause.
+SENTENCE_END: Final = re.compile(r"(?<=[.!?])\s+|。|\n\s*\n")
+# A sentence opening with a pronoun continues the previous sentence's subject.
+PRONOUN_START: Final = re.compile(r"\s*(?:it|this|that)\b|\s*(?:それ|これ)", re.IGNORECASE)
+# Do not split "required_gaps: 0" or coordinated verbs such as "and is".
+# Bare "and"/"or" before a command name joins subjects ("status --json or gaps ... is").
+CLAUSE_BREAK: Final = re.compile(
+    r"[,;，；、\n]|(?<!required_gaps):|ので|けれど|けど|\b(?:but|however|although|though|yet|whereas|while|so|then|because|since|therefore|thus|which)\b"
+    r"|\b(?:and|or)\b(?!\s+`?(?:status --json|gaps|show --json|required_gaps|mandala|is|serves|proves|satisfies|replaces)\b)",
+    re.IGNORECASE,
+)
+
+
+def status_gate_substitute(sentence: str, inherited_subject: bool = False) -> str | None:
+    """Return the first un-negated clause offering `status --json` as the completion gate, if any."""
+    if not (STATUS_GATE_SUBJECT.search(sentence) or inherited_subject):
+        return None
+    prior_clause_subject = inherited_subject
+    for clause in CLAUSE_BREAK.split(sentence):
+        if not clause.strip():
+            continue
+        pronoun_subject = prior_clause_subject and bool(PRONOUN_START.match(clause))
+        for pattern, needs_own_subject in STATUS_GATE_SUBSTITUTES:
+            for match in pattern.finditer(clause):
+                before, after = clause[:match.start()], clause[match.end():]
+                if negated(before, after, match.group(0)):
+                    continue
+                if needs_own_subject:
+                    # Only the clause subject can claim that something proves completion.
+                    # A preceding mention of status in another clause does not make
+                    # "tests prove completion" a status-substitution claim.
+                    if not (STATUS_GATE_SUBJECT.search(before) or pronoun_subject):
+                        continue
+                return clause.strip()
+        prior_clause_subject = bool(STATUS_GATE_SUBJECT.search(clause)) or pronoun_subject
+    return None
+
+
+# Public documents must point to `status --json` and keep the completion gate distinct.
+STATUS_DOC_CLAUSES: Final = {
+    "README.md": "`status --json` does not replace `gaps --required --json` as the completion gate.",
+    "README.ja.md": "`status --json` は完了判定の `gaps --required --json` の代わりにはなりません。",
+    "docs/INSTALLATION.md": "`status --json` does not replace `gaps --required --json` as the completion gate.",
+    "docs/INSTALLATION.ja.md": "`status --json` は完了判定の `gaps --required --json` の代わりにはなりません。",
+}
 OBSOLETE_VERSION: Final = re.compile(
     r"Do not (?:assume|rely on)[^\n.]*--version|no public[^\n.]*--version"
     r"|There is no required[^\n.]*--version|--version[^\n。]*(?:必須確認に使いません|前提にしません)",
@@ -131,6 +246,31 @@ def validate_cli_baseline(text: str, name: str) -> None:
         raise ValueError(f"missing CLI baseline/version check: {name}")
     if "v0.2.0" in text or OBSOLETE_VERSION.search(text):
         raise ValueError(f"obsolete CLI baseline/version guidance: {name}")
+    for pattern, current in BASELINE_TOKENS:
+        for match in pattern.finditer(text):
+            if match.group(1).rstrip(TOKEN_TRAILING) != current:
+                raise ValueError(f"stale or unpinned CLI baseline {match.group(0)!r} (current {current}): {name}")
+    validate_status_guidance(text, name)
+
+
+def validate_status_guidance(text: str, name: str) -> None:
+    """Reject global `--json` placement and `status --json` presented as the completion gate."""
+    if GLOBAL_STATUS_JSON.search(text):
+        raise ValueError(f"invalid global --json guidance for status: {name}")
+    previous_subject = False
+    for sentence in SENTENCE_END.split(text):
+        clause = status_gate_substitute(sentence, previous_subject and bool(PRONOUN_START.match(sentence)))
+        previous_subject = bool(STATUS_GATE_SUBJECT.search(sentence))
+        if clause is not None:
+            raise ValueError(f"status --json presented as a completion gate substitute: {name}: {clause[:80]!r}")
+
+
+def validate_status_contract(text: str, name: str) -> None:
+    """The CLI contract documents `status --json` (schema, exits, roles) exactly."""
+    validate_status_guidance(text, name)
+    for clause in STATUS_JSON_CONTRACT:
+        if clause not in text:
+            raise ValueError(f"missing status JSON contract: {name}: {clause[:60]!r}")
 
 
 def active_instruction_text(markdown: str) -> str:
@@ -271,6 +411,10 @@ def validate_documentation(root: Path) -> None:
         validate_cli_baseline(guide, name)
         if PINNED_INSTALL not in guide:
             raise ValueError(f"README omits pinned CLI installation: {name}")
+    for name, clause in STATUS_DOC_CLAUSES.items():
+        guide = (root / name).read_text(encoding="utf-8")
+        if "status --json" not in guide or "gaps --required --json" not in guide or clause not in guide:
+            raise ValueError(f"documentation omits status --json guidance or the completion gate distinction: {name}")
     for name in ("README.md", "README.ja.md"):
         guide = (root / "tests" / name).read_text(encoding="utf-8")
         validate_cli_baseline(guide, f"tests/{name}")
@@ -543,8 +687,18 @@ def package_files(package: Path, root: Path = ROOT) -> dict[Path, bytes]:
     validate_skill_budget(files[Path("SKILL.md")], str(package / "SKILL.md"))
     validate_safety_contract(skill)
     validate_cli_baseline(skill, str(package / "SKILL.md"))
-    validate_cli_baseline(files[Path("references/cli-contract.md")].decode("utf-8"), str(package / "references/cli-contract.md"))
+    contract = files[Path("references/cli-contract.md")].decode("utf-8")
+    validate_cli_baseline(contract, str(package / "references/cli-contract.md"))
+    validate_status_contract(contract, str(package / "references/cli-contract.md"))
     return files
+
+
+def validate_packages(packages: tuple[Path, Path] = PACKAGES, root: Path = ROOT) -> dict[Path, bytes]:
+    """Validate the canonical and generated packages and require byte-identical contents."""
+    snapshots = [package_files(package, root) for package in packages]
+    if snapshots[0] != snapshots[1]:
+        raise ValueError("generated package differs from canonical source")
+    return snapshots[0]
 
 
 def main() -> None:
@@ -552,9 +706,7 @@ def main() -> None:
         require_real_directory_path(ROOT, package, allow_missing=True)
     if CATALOG_ERROR is not None:
         raise ValueError(f"invalid safety contract catalog: {CATALOG_ERROR}")
-    snapshots = [package_files(package) for package in PACKAGES]
-    if snapshots[0] != snapshots[1]:
-        raise ValueError("generated package differs from canonical source")
+    validate_packages()
     cases = json.loads((ROOT / "tests" / "evals" / "cases.json").read_text(encoding="utf-8"))
     if not isinstance(cases, list):
         raise ValueError("eval fixture must be a list")

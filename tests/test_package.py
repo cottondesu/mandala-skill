@@ -342,7 +342,7 @@ class PackageTests(unittest.TestCase):
             self.assertIn(validate.PINNED_INSTALL, guide)
             self.assertNotIn("go install github.com/cottondesu/mandala/cmd/mandala@latest", guide)
         for name in ("README.md", "README.ja.md"):
-            self.assertIn("v0.3.0", (ROOT / name).read_text(encoding="utf-8"))
+            self.assertIn("v0.4.0", (ROOT / name).read_text(encoding="utf-8"))
 
     def test_capacity_fixtures_and_manual_rows_are_required(self) -> None:
         cases = json.loads((ROOT / "tests" / "evals" / "cases.json").read_text(encoding="utf-8"))

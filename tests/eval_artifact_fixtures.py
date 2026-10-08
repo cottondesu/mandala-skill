@@ -125,9 +125,9 @@ def write_run(run_dir, specs, evidence=True, raw=True, summary_overrides=None, a
     summary = {
         "schema_version": 1, "run_id": "20261002T000000Z-codex-release-abc123", "started_at": "2026-10-02T00:00:00Z", "finished_at": "2026-10-02T00:10:00Z",
         "suite": "release", "cases_requested": [spec.alias for spec in specs], "agent": agent, "agent_version": "codex-cli 0.0.0", "model": "example-model",
-        "skill_git_sha": "0" * 40, "skill_dirty": False, "skill_sha256": "1" * 64, "cli_contract_sha256": "2" * 64, "mandala_cli_version": "mandala v0.3.0",
+        "skill_git_sha": "0" * 40, "skill_dirty": False, "skill_sha256": "1" * 64, "cli_contract_sha256": "2" * 64, "mandala_cli_version": "mandala v0.4.0",
         "timeout_seconds": 300.0, "model_requested": None, "global_skill_conflict_allowed": False, "complete": True,
-        "preflight": {"agent": agent, "ok": True, "checks": [], "agent_version": "codex-cli 0.0.0", "mandala_cli_version": "mandala v0.3.0"},
+        "preflight": {"agent": agent, "ok": True, "checks": [], "agent_version": "codex-cli 0.0.0", "mandala_cli_version": "mandala v0.4.0"},
         "counts": dict(sorted(counts.items())), "manual_review_required": sum(1 for result in results if result["manual_review_required"] and result["turns_completed"]),
         "contract_coverage": {"exercised": [], "automatically_checked": [], "manual_review": [], "not_exercised": []},
         "cases": [{key: result[key] for key in ("case", "fixture", "status", "manual_review_required", "error")} for result in results],

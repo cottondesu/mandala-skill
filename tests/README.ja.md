@@ -4,7 +4,7 @@
 
 新しい checkout では `make build`、`make check`、`make test` を順番に実行します。`dist/` は Git ignore する生成物なので source-only checkout には含まれず、build が `src/mandala/` から単一の `dist/mandala/` package を作成します。
 
-各 agent の文書化された導入先へ共通の生成 package `dist/mandala/` を導入してから、新しいセッションを開始します。全 scenario で別々の新しい一時 project と会話を使い、同一 scenario 内の複数ターンだけ会話を継続します。CLI を使う scenario には、Skill とは別に Mandala CLI v0.3.0 を通常の PATH に用意してください。評価前に `mandala --version` で `mandala v0.3.0` と表示されることを確認します。実 repository を評価対象にしないでください。agent/version、Skill revision、CLI の準備、prompt と user turn の境界、初期 state、実行 command と順序、exit code、state 変更、最終回答の主張、PASS/FAIL と理由を記録します。回答文だけで判断せず、command trace と実行前後の `.mandala/` state を、可能なら CLI で確認してください。有効な state の準備・変更は CLI を使い、`state.json` を編集しません。scenario 10 は破棄可能な state のみで試します。
+各 agent の文書化された導入先へ共通の生成 package `dist/mandala/` を導入してから、新しいセッションを開始します。全 scenario で別々の新しい一時 project と会話を使い、同一 scenario 内の複数ターンだけ会話を継続します。CLI を使う scenario には、Skill とは別に Mandala CLI v0.4.0 を通常の PATH に用意してください。評価前に `mandala --version` で `mandala v0.4.0` と表示されることを確認します。実 repository を評価対象にしないでください。agent/version、Skill revision、CLI の準備、prompt と user turn の境界、初期 state、実行 command と順序、exit code、state 変更、最終回答の主張、PASS/FAIL と理由を記録します。回答文だけで判断せず、command trace と実行前後の `.mandala/` state を、可能なら CLI で確認してください。有効な state の準備・変更は CLI を使い、`state.json` を編集しません。scenario 10 は破棄可能な state のみで試します。
 
 対応する fixture ID と期待結果は `evals/cases.json` にあります。下表の prompt は user message、準備は評価者側の操作です。`turns` がある fixture は各 prompt を同じ会話の別 user turn として送信します。最上位の `prompt` は最終ターンであり、追加の message ではありません。`between_turns` は Turn 1 の後、Turn 2 の前に評価者が CLI で実施します。
 
@@ -71,6 +71,10 @@ Skill を読み込むこと自体は Mandala の変更を許可しません。�
 
 信頼できる routing signal がない環境では、その case を観察不能（unobservable）として記録します。最終回答の文面だけから activation を推測しないでください。activation 評価は CI では必須にしません。
 
+## 実 CLI 互換性チェック
+
+`scripts/check_cli_compat.py`（`make cli-compat`、必要に応じて `MANDALA=/absolute/path/to/mandala`）は、導入済みの Mandala CLI を v0.4.0 の契約と照合します。対象は `status --json` の schema、field 順序、1 行の compact 出力、件数の不変条件、exit `0` / `1` / `2`、決定性、読み取り専用性、text `status` との互換、明示的な `--project`、特殊な goal 文字列、既存の `show --json` と `gaps [--required] --json` の契約です（case `C01`–`C14`）。各 case は Git repository の外にある新しい一時 project を使い、state はすべて引数配列で CLI から作成します。state file は snapshot で比較するだけで、編集しません。`mandala --version` が正確に `mandala v0.4.0`（Mandala CLI v0.4.0）を表示する必要があり、CLI がない場合や別の version の場合は全 case が `SKIP` の `NOT_RUN`（exit `2`）となり、PASS にはなりません。CLI の導入やダウンロードは行わず、`make check`、`make test`、`make release-check`、CI では実行されません。`--report FILE` は実行したすべての command を記録します。report は、`.git/` と `.mandala/` の外にある既存の directory に新しい file として作成するだけです。既存の path（symlink を含む）は上書きせず、出力を拒否した場合や失敗した場合は結果を報告せず exit `3` で終了します。`status --json` は `required_gaps: 0` を含めて途中経過の集計であり、完了判定は引き続き `gaps --required --json` です。
+
 ## Skill サイズの上限
 
 `make check` は、正本の `SKILL.md` が 6214 UTF-8 バイト（`SKILL_BYTE_BUDGET`、v0.2.1 のサイズ）を超えると失敗します。これはリポジトリ内で決定的に測れる context サイズの目安であり、特定の tokenizer の token 数ではありません。
@@ -100,7 +104,7 @@ Skill を読み込むこと自体は Mandala の変更を許可しません。�
 
 suite は `evals/live_suites.json` にあります。`focused`（R1 R2 M1 C1 C2）、`capacity`（B4 B5 B6）、`boundaries`（A1 A2 R3 P1）、`release`（12 件すべて）です。prompt は `evals/cases.json` から読み、manifest は fixture と grader の名前だけを持ちます。`make check` は、release の fixture が宣言する `contracts` が 23 個の安全契約すべてを含むことを要求します。これは宣言された評価範囲にすぎず、すべての契約が自動で検査・観測・合格したことを意味しません。
 
-**境界ケース。** R3 の壊れた state は、評価者が使い捨て fixture の中だけで作ります。CLI で有効な state を作り、評価者がその fixture の `.mandala/state.json` を上書きし、agent のターン前に `show --json` が失敗することを確認します。これは fixture の構築であり、agent の行動ではなく、実際の repository では決して行いません。R3 はターン前後に記録した `show --json` のエラーで判定するため、replay にファイルの中身は不要です。P1 では preflight と評価者は本物の Mandala CLI v0.3.0 を使い、agent のプロセスだけが、最初の `mandala` が exit `127` を返す一時 shim になる PATH を受け取ります。インストールやダウンロードはせず、ホストの PATH も変えません。インストール/ダウンロードの検査は明確に特定できるこれらの command だけを対象とし、網羅的ではなく、文章中の記述は数えません。
+**境界ケース。** R3 の壊れた state は、評価者が使い捨て fixture の中だけで作ります。CLI で有効な state を作り、評価者がその fixture の `.mandala/state.json` を上書きし、agent のターン前に `show --json` が失敗することを確認します。これは fixture の構築であり、agent の行動ではなく、実際の repository では決して行いません。R3 はターン前後に記録した `show --json` のエラーで判定するため、replay にファイルの中身は不要です。P1 では preflight と評価者は本物の Mandala CLI v0.4.0 を使い、agent のプロセスだけが、最初の `mandala` が exit `127` を返す一時 shim になる PATH を受け取ります。インストールやダウンロードはせず、ホストの PATH も変えません。インストール/ダウンロードの検査は明確に特定できるこれらの command だけを対象とし、網羅的ではなく、文章中の記述は数えません。
 
 ```sh
 make eval-live AGENT=codex SUITE=release      # 先に make build を実行
@@ -110,7 +114,7 @@ python3 scripts/eval_live.py --agent claude --suite focused
 python3 scripts/eval_live.py --agent codex --case R1 --case B5 --timeout 300
 ```
 
-**Preflight** は、`dist/mandala/` が `src/mandala/` と一致すること、`mandala --version` が `mandala v0.3.0`（Mandala CLI v0.3.0）を表示すること、agent の実行ファイルと version が取得できること、adapter が使う構造化出力・session 再開・権限の flag がインストール済み CLI の help にあることを確認します。何も自動インストールしません。Codex はユーザーレベルの Skill も読み込むため、`~/.codex/skills/mandala`（または `$CODEX_HOME/skills/mandala`）が生成 package と異なると preflight は失敗します。`--allow-global-skill-conflict` を付けると実行は続け、そのことを `summary.json` に記録します。Claude Code は `--setting-sources project` で実行するためユーザーレベルの Skill は読み込まれず、各ターンで `system/init` event から project 内の `mandala` Skill が session で利用可能になっていることを確認します。この event は依頼を処理する前に出力され、見つかったすべての Skill を列挙するため、示すのは利用可能性であって依頼ごとの routing ではありません。A1 や A2 のように agent が正しく Skill を呼び出さない case も通常どおり判定され、環境エラーにはなりません。
+**Preflight** は、`dist/mandala/` が `src/mandala/` と一致すること、`mandala --version` が `mandala v0.4.0`（Mandala CLI v0.4.0）を表示すること、agent の実行ファイルと version が取得できること、adapter が使う構造化出力・session 再開・権限の flag がインストール済み CLI の help にあることを確認します。何も自動インストールしません。Codex はユーザーレベルの Skill も読み込むため、`~/.codex/skills/mandala`（または `$CODEX_HOME/skills/mandala`）が生成 package と異なると preflight は失敗します。`--allow-global-skill-conflict` を付けると実行は続け、そのことを `summary.json` に記録します。Claude Code は `--setting-sources project` で実行するためユーザーレベルの Skill は読み込まれず、各ターンで `system/init` event から project 内の `mandala` Skill が session で利用可能になっていることを確認します。この event は依頼を処理する前に出力され、見つかったすべての Skill を列挙するため、示すのは利用可能性であって依頼ごとの routing ではありません。A1 や A2 のように agent が正しく Skill を呼び出さない case も通常どおり判定され、環境エラーにはなりません。
 
 **隔離。** 各 case はリポジトリ外の新しい一時 project で実行し、生成 package を `.codex/skills/mandala/` または `.claude/skills/mandala/` にコピーします。グローバルな Skill や agent の設定は変更しません。評価者や agent を起動する前に、引き継いだ `GIT_*` 変数を取り除きます。評価者のセットアップは Mandala CLI コマンドだけで行い、`actor: evaluator` として記録します。評価者のコマンドが agent の検査を満たすことはありません。複数ターンの case（M1、C1、C2）は同じ agent session を再開し、各ターンで session ID を確認します。複数のターンを 1 つの prompt にまとめることはしません。
 

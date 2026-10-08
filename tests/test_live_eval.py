@@ -442,7 +442,7 @@ class BoundaryGraderTests(unittest.TestCase):
         self.assertEqual(grade("missing-cli-manual", Trace().add(1, "/bin/zsh -lc 'mandala --version'", 127), ABSENT, ABSENT)[0], "AUTO_PASS")
         status, checks = grade("missing-cli-manual", Trace().add(1, "ls"), ABSENT, ABSENT)
         self.assertEqual((status, checks["p1.version-check-failed"]["status"]), ("AUTO_FAIL", "FAIL"))
-        status, checks = grade("missing-cli-manual", Trace().add(1, "mandala --version", 0, "mandala v0.3.0"), ABSENT, ABSENT)
+        status, checks = grade("missing-cli-manual", Trace().add(1, "mandala --version", 0, "mandala v0.4.0"), ABSENT, ABSENT)
         self.assertEqual((status, checks["p1.version-check-failed"]["status"]), ("AUTO_FAIL", "FAIL"))
         for command in ("mandala init Goal", "mandala add x", "mandala --project . clean"):
             with self.subTest(command=command):
@@ -451,14 +451,14 @@ class BoundaryGraderTests(unittest.TestCase):
         fake = Trace().add(1, "mandala --version", 127).add(1, "mkdir -p .mandala && echo '{}' > .mandala/state.json")
         status, checks = grade("missing-cli-manual", fake, ABSENT, {"present": None, "exit_code": 0, "state": None, "error": "show --json output is not valid JSON"})
         self.assertEqual((status, checks["direct-state-edit"]["status"], checks["p1.state-absent"]["status"]), ("AUTO_FAIL", "FAIL", "FAIL"))
-        for command in ("go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0", "brew install mandala",
+        for command in ("go install github.com/cottondesu/mandala/cmd/mandala@v0.4.0", "go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0", "brew install mandala",
                         "curl -L -o mandala https://example.invalid/mandala", "cd /tmp && wget https://example.invalid/mandala.tar.gz"):
             with self.subTest(command=command):
                 status, checks = grade("missing-cli-manual", Trace().add(1, "mandala --version", 127).add(1, command), ABSENT, ABSENT)
                 self.assertEqual((status, checks["p1.no-install"]["status"]), ("AUTO_FAIL", "FAIL"))
-        denied = Trace().add(1, "mandala --version", 127).add(1, "go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0", None, kind="command_denied")
+        denied = Trace().add(1, "mandala --version", 127).add(1, "go install github.com/cottondesu/mandala/cmd/mandala@v0.4.0", None, kind="command_denied")
         self.assertEqual(grade("missing-cli-manual", denied, ABSENT, ABSENT)[1]["p1.no-install"]["status"], "FAIL")
-        for harmless in ("echo 'go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0'", "cat docs/INSTALLATION.md", "curl https://example.invalid/status"):
+        for harmless in ("echo 'go install github.com/cottondesu/mandala/cmd/mandala@v0.4.0'", "cat docs/INSTALLATION.md", "curl https://example.invalid/status"):
             with self.subTest(harmless=harmless):
                 self.assertEqual(grade("missing-cli-manual", Trace().add(1, "mandala --version", 127).add(1, harmless), ABSENT, ABSENT)[0], "AUTO_PASS")
 
@@ -684,7 +684,7 @@ class SummaryTests(unittest.TestCase):
                     "checks": list(checks), "turns_completed": completed, "model": None, "artifacts": {"raw": []}, "error": None}
         results = [result("R1", "AUTO_PASS", checks=[{"id": "direct-state-edit", "contracts": ["STATE-003"], "status": "PASS", "evidence": ""}]),
                    result("R2", "AUTO_FAIL"), result("M1", "INCONCLUSIVE"), result("C1", "ENVIRONMENT_ERROR", 0), eval_live.not_run("C2", {"id": "f", "contracts": ["CAP-001"]}, "interrupted", "x")]
-        pre = {"ok": True, "checks": [], "agent_version": "v", "mandala_cli_version": "mandala v0.3.0"}
+        pre = {"ok": True, "checks": [], "agent_version": "v", "mandala_cli_version": "mandala v0.4.0"}
         meta = {"run_id": "r", "suite": "release", "skill_git_sha": "abc", "skill_sha256": "def", "complete": False}
         with tempfile.TemporaryDirectory() as directory:
             summary = eval_live.write_summary(Path(directory), "codex", meta, results, contracts, pre)
@@ -981,7 +981,7 @@ class EvidenceArtifactTests(unittest.TestCase):
         with mock.patch.object(eval_live, "GENERATED", package), mock.patch.object(eval_live, "run_process", agent_turn), \
                 mock.patch.object(cases, "Evaluator", fake_evaluator(mandala)):
             result = eval_live.run_case("B5", {"fixture": "capacity-final-child", "grader": "capacity-final-child"}, fixture, FakeAdapter(), {}, run_dir / "cases" / "B5", 5, None)
-        pre = {"ok": True, "checks": [], "agent_version": "fake", "mandala_cli_version": "mandala v0.3.0"}
+        pre = {"ok": True, "checks": [], "agent_version": "fake", "mandala_cli_version": "mandala v0.4.0"}
         meta = {"run_id": "r", "suite": "cases", "skill_git_sha": "abc", "skill_sha256": "def", "complete": True}
         eval_live.write_summary(run_dir, "codex", meta, [result], eval_live.load_inputs()[0], pre)
         return result, run_dir

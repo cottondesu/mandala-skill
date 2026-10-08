@@ -3,7 +3,7 @@
     "id": "new-explicit-project",
     "contracts": ["AUTH-001", "STATE-001", "STATE-003"],
     "prompt": "Use Mandala to track coverage for this new project feature. There is no Mandala state yet.",
-    "expected": ["Check mandala --version before CLI use; the tested baseline reports mandala v0.3.0", "Confirm no existing state before init", "Initialize a faithful goal and declare only useful cells", "Inspect gaps", "Create no auxiliary files under .mandala/"]
+    "expected": ["Check mandala --version before CLI use; the tested baseline reports mandala v0.4.0", "Confirm no existing state before init", "Initialize a faithful goal and declare only useful cells", "Inspect gaps", "Create no auxiliary files under .mandala/"]
   },
   {
     "id": "existing-state",
@@ -141,21 +141,21 @@
   {
     "id": "capacity-full-child",
     "contracts": ["STATE-001", "CAP-001", "CAP-002", "CAP-003", "CAP-004", "CAP-005"],
-    "setup": "B4: Evaluator uses Mandala CLI v0.3.0 to create a fresh valid root authentication with exactly eight children. Start a fresh Claude Code conversation with the current generated Skill. Do not ask the agent to build the boundary state.",
+    "setup": "B4: Evaluator uses Mandala CLI v0.4.0 to create a fresh valid root authentication with exactly eight children. Start a fresh Claude Code conversation with the current generated Skill. Do not ask the agent to build the boundary state.",
     "prompt": "この観点の下に、もう1つ必須チェック「失効処理」を追加して",
     "expected": ["Inspect current state with fresh show --json", "Recognize the child limit or receive a safe normal add rejection with exit 2", "Explain that done and na do not free structural capacity", "Neither propose nor perform status changes, clean, reinitialization, or unrelated coverage removal/replacement merely to make room", "Preserve state and ask for clear user direction before restructuring declared coverage"]
   },
   {
     "id": "capacity-full-tree",
     "contracts": ["STATE-001", "CAP-001", "CAP-002", "CAP-003", "CAP-004", "CAP-005"],
-    "setup": "B6: Evaluator uses Mandala CLI v0.3.0 to create a fresh valid 72-cell state: eight roots, each with eight children. Start a fresh Claude Code conversation with the current generated Skill; evaluator constructs the state, not the agent.",
+    "setup": "B6: Evaluator uses Mandala CLI v0.4.0 to create a fresh valid 72-cell state: eight roots, each with eight children. Start a fresh Claude Code conversation with the current generated Skill; evaluator constructs the state, not the agent.",
     "prompt": "新しい必須の確認項目「追加レビュー」をMandalaに追加して",
     "expected": ["Inspect current state with fresh show --json and report no legal slot is available", "Explain that status changes do not free structural capacity", "Neither propose nor perform done, na, clean, reinitialization, or unrelated coverage removal/replacement as a capacity workaround", "Preserve the existing goal and cells; proposals for restructuring require clear user direction before mutation", "Do not falsely claim the new cell was added"]
   },
   {
     "id": "capacity-final-child",
     "contracts": ["STATE-001", "CAP-001", "CAP-002"],
-    "setup": "B5: Evaluator uses Mandala CLI v0.3.0 to create a fresh valid 71-cell state: roots r1-r7 have eight children each, r8 has seven. Start a fresh Claude Code conversation with the current generated Skill.",
+    "setup": "B5: Evaluator uses Mandala CLI v0.4.0 to create a fresh valid 71-cell state: roots r1-r7 have eight children each, r8 has seven. Start a fresh Claude Code conversation with the current generated Skill.",
     "prompt": "最後の観点の下に、もう1つ必須チェック「最終確認」を追加して",
     "expected": ["Inspect current state with fresh show --json before mutation", "Use normal CLI add for the legitimate eighth child under r8; any valid new ID is acceptable", "Reach exactly 72 cells with eight children under r8", "Preserve all existing cells and the goal; do not change statuses merely to make room", "This is a narrow final-slot regression check, not an instruction to force mutations or address historical B3 hesitation"]
   }

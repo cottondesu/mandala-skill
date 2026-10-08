@@ -7,13 +7,13 @@
 Mandala CLI は別途必要です。Skill は CLI をダウンロードしません。Go を導入済みの場合、基本のコマンドは次のとおりです。
 
 ```sh
-go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0
+go install github.com/cottondesu/mandala/cmd/mandala@v0.4.0
 mandala --version
 ```
 
-期待する表示は `mandala v0.3.0`（exit `0`）です。`mandala --version` は project option や command と組み合わせず単独で実行します。実行可否と build version の確認に使い、構文の確認には `mandala --help` または `mandala <command> --help` を使います。
+期待する表示は `mandala v0.4.0`（exit `0`）です。`mandala --version` は project option や command と組み合わせず単独で実行します。実行可否と build version の確認に使い、構文の確認には `mandala --help` または `mandala <command> --help` を使います。
 
-この Skill の検証済み基準は Mandala CLI v0.3.0 です。`@latest` で導入される新しい版は、この Skill との互換性が未検証の場合があります。Go の binary directory を `PATH` に含めます（[`mandala` が見つからない場合](#mandala-が見つからない場合)を参照）。Go 要件や CLI の説明は [Mandala CLI リポジトリ](https://github.com/cottondesu/mandala)を確認してください。ローカルの開発 build では `mandala (devel)` と表示される場合があり、それでは release の基準を確認できません。
+この Skill の検証済み基準は Mandala CLI v0.4.0 で、build には Go 1.26 以上が必要です。`@latest` で導入される新しい版は、この Skill との互換性が未検証の場合があります。Go の binary directory を `PATH` に含めます（[`mandala` が見つからない場合](#mandala-が見つからない場合)を参照）。Go 要件や CLI の説明は [Mandala CLI リポジトリ](https://github.com/cottondesu/mandala)を確認してください。ローカルの開発 build では `mandala (devel)` と表示される場合があり、それでは release の基準を確認できません。
 
 ### `mandala` が見つからない場合
 
@@ -62,16 +62,16 @@ fi
 
 結果の見方:
 
-- `mandala v0.3.0`: CLI は導入済みで、`PATH` だけが不足しています。下の手順に進みます。
+- `mandala v0.4.0`: CLI は導入済みで、`PATH` だけが不足しています。下の手順に進みます。
 - `No mandala in ...`: Go の binary directory に CLI がありません。上の固定コマンドで `go install` を実行し、出力にエラーがないか確認します。
 - `exists but is not an executable file`: file、権限、この OS / CPU 向けの build かを確認します。権限を編集するより固定コマンドで再導入する方が簡単な場合が多いです。
-- 別の version、または `mandala (devel)`: 検証済みの v0.3.0 基準ではありません。基準が必要な場合は固定コマンドで再導入します。
+- 別の version、または `mandala (devel)`: 検証済みの v0.4.0 基準ではありません。基準が必要な場合は固定コマンドで再導入します。
 - Go が `PATH` にない: 先に Go を導入するか、Go 自体の `PATH` 設定を直します。
 - `Error: go env ... failed`: Go が設定を取得できなかったため、directory を推測せず、CLI も実行しません。`go env GOBIN` または `go env GOPATH` を実行して Go のエラーを確認し、先に Go の設定を直します。
 
 絶対パスで起動できることは、その file が実行でき、表示された version を報告したことしか示しません。binary の入手元や真正性は確認できません。
 
-**現在のシェルのみ。** 絶対パスでの確認で `mandala v0.3.0` と表示された場合だけ、`GO_BIN` を設定したのと同じシェルで、この terminal session の `PATH` に directory を追加します。
+**現在のシェルのみ。** 絶対パスでの確認で `mandala v0.4.0` と表示された場合だけ、`GO_BIN` を設定したのと同じシェルで、この terminal session の `PATH` に directory を追加します。
 
 ```sh
 export PATH="$GO_BIN:$PATH"
@@ -137,7 +137,7 @@ if ($GoBin) {
 
 この確認は完全修飾パスだけを受け付けます。`C:\Users\name\go\bin` のような drive パスと、`\\server\share\go\bin` のような UNC パスです。空の値、drive 相対パス（`C:go\bin`）、root 相対パス（`\go\bin`）、相対パス、Windows で使えない文字を含むパスは拒否します。`\\?\` 形式の device パスも受け付けません。パスは文字列として組み立てるため、存在しない drive や share は「見つからない」と報告されます。Windows PowerShell 5.1 と PowerShell 7 の両方を想定した書き方です。
 
-結果は macOS / Linux と同じように読みます。`&` は指定したパスのプログラムを実行し、空白を含むパスにも対応します。`mandala v0.3.0` と表示された場合は、現在の PowerShell session だけに directory を追加します。
+結果は macOS / Linux と同じように読みます。`&` は指定したパスのプログラムを実行し、空白を含むパスにも対応します。`mandala v0.4.0` と表示された場合は、現在の PowerShell session だけに directory を追加します。
 
 ```powershell
 $env:Path = "$GoBin;$env:Path"
@@ -228,7 +228,7 @@ New-Item -ItemType Directory -Force "$ProjectRoot/.claude/skills" | Out-Null
 Copy-Item -Recurse "src/mandala" "$ProjectRoot/.claude/skills/"
 ```
 
-PowerShell でも CLI は別途必要です。`go install github.com/cottondesu/mandala/cmd/mandala@v0.3.0` を実行し、Go の binary directory を `PATH` に設定した後、`mandala --version` で `mandala v0.3.0` と表示されることを確認してください。`mandala` が見つからない場合は [Windows PowerShell で CLI を探す](#windows-powershell-で-cli-を探す)を参照してください。
+PowerShell でも CLI は別途必要です。`go install github.com/cottondesu/mandala/cmd/mandala@v0.4.0` を実行し、Go の binary directory を `PATH` に設定した後、`mandala --version` で `mandala v0.4.0` と表示されることを確認してください。`mandala` が見つからない場合は [Windows PowerShell で CLI を探す](#windows-powershell-で-cli-を探す)を参照してください。
 
 ## 確認
 
@@ -258,9 +258,10 @@ Skill を削除する場合は、導入先の `mandala` ディレクトリだけ
 - `go env GOBIN` が空の場合: Go は `GOPATH` の先頭要素の下の `bin` を使います。
 - 独自の `GOBIN` を設定している場合: `~/go/bin` ではなく、その directory を `PATH` に追加します。
 - `mandala` は存在するが実行できない場合: 通常の file であること、実行権限、この OS / CPU 向けの build かを確認します。
-- `mandala --version` が `mandala v0.3.0` 以外を表示する場合: その binary は検証済み基準ではありません。基準が必要なら固定コマンドで再導入します。
+- `mandala --version` が `mandala v0.4.0` 以外を表示する場合: その binary は検証済み基準ではありません。基準が必要なら固定コマンドで再導入します。
 - terminal では動くがエージェントでは動かない場合: エージェントの環境の `PATH` が異なります。[デスクトップアプリや IDE から起動したエージェント](#デスクトップアプリや-ide-から起動したエージェント)を参照してください。
 - `go` 自体が見つからない場合: [Mandala CLI リポジトリ](https://github.com/cottondesu/mandala)を参照し、先に Go を導入・設定します。
 - Skill が認識されない場合: 導入先の名前と二つの file を確認し、新しいセッションを開始します。
 - 既存 Mandala project の目標と依頼が衝突する場合: 状態を確認し、`clean` や file の直接編集で初期化しないでください。
 - `mandala gaps` が exit `1` の場合: required gap が残る正常な結果です。exit `2` はエラーです。
+- `mandala status --json` が exit `1` の場合: required gap が残っており、stdout には `required_gaps` が 0 より大きい有効な JSON が出力されています。クラッシュとして扱わず JSON を解析します。`--json` は `status` の option なので `mandala --project <project-root> status --json` と書きます。`--json` を command より前に置くと exit `2` で失敗します。`status --json` は完了判定の `gaps --required --json` の代わりにはなりません。

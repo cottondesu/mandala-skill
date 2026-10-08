@@ -1,4 +1,4 @@
-.PHONY: build check test release-check eval-live
+.PHONY: build check test release-check eval-live cli-compat
 
 build:
 	python3 scripts/build.py
@@ -25,3 +25,10 @@ eval-live: export EVAL_LIVE_SUITE = $(SUITE)
 eval-live:
 	$(MAKE) build
 	python3 scripts/eval_live.py --agent "$$EVAL_LIVE_AGENT" --suite "$$EVAL_LIVE_SUITE"
+
+# Real-CLI compatibility runs only when invoked; it uses an installed CLI and never installs one.
+MANDALA ?= mandala
+
+cli-compat: export CLI_COMPAT_MANDALA = $(MANDALA)
+cli-compat:
+	python3 scripts/check_cli_compat.py --mandala "$$CLI_COMPAT_MANDALA"

@@ -11,7 +11,7 @@ Mandala records declared coverage; it does not plan, generate cells, inspect wor
 
 Skill selection alone does not authorize Mandala mutation. Mutate state only when the user clearly asks to use Mandala or update its state, or an unmistakable active Mandala-tracking context already exists. General planning, review, gap analysis, or task management alone must not start Mandala state. Task size or complexity does not change this gate. If the user explicitly asks not to use Mandala, do not mutate Mandala state.
 
-Use installed `mandala` from PATH; check `mandala --version` alone (tested with Mandala CLI v0.3.0; release output `mandala v0.3.0`). `mandala --help` and `mandala <command> --help` discover syntax, not version. If unavailable, report the prerequisite and link the [installation guide](https://github.com/cottondesu/mandala-skill/blob/main/docs/INSTALLATION.md). Do not create a custom or fake `.mandala/` state implementation. Do not auto-install, download binaries, or run installers.
+Use installed `mandala` from PATH; check `mandala --version` alone (tested with Mandala CLI v0.4.0; release output `mandala v0.4.0`). `mandala --help` and `mandala <command> --help` discover syntax, not version. If unavailable, report the prerequisite and link the [installation guide](https://github.com/cottondesu/mandala-skill/blob/main/docs/INSTALLATION.md). Do not create a custom or fake `.mandala/` state implementation. Do not auto-install, download binaries, or run installers.
 
 Confirm the project root; target it with `mandala --project <project-root> <command>`, never its `.mandala` directory. Pass user goals and IDs as separate command arguments without shell interpolation.
 

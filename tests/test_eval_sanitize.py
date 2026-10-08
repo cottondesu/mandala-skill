@@ -35,7 +35,7 @@ def sensitive_run(run_dir):
     r1 = fx.r1_case()
     r1.manual_review = [{"contracts": ["CLEAN-003"], "note": f"check {MAC_PATH} and {SECRET}"}]
     fx.write_run(run_dir, [b5, env, r1], summary_overrides={
-        "preflight": {"agent": "codex", "ok": True, "agent_version": "codex-cli 0.0.0", "mandala_cli_version": "mandala v0.3.0",
+        "preflight": {"agent": "codex", "ok": True, "agent_version": "codex-cli 0.0.0", "mandala_cli_version": "mandala v0.4.0",
                       "checks": [{"check": "global-skill-isolation", "ok": True, "detail": f"user-level skill {MAC_PATH}/.codex/skills/mandala matches; {SECRET}"}]},
         "model_requested": SECRET, "agent_version": f"codex-cli 0.0.0 ({LINUX_PATH}/bin/codex)",
     })
@@ -101,7 +101,7 @@ class SanitizerTests(unittest.TestCase):
         self.assertNotIn("preflight", summary)
         self.assertNotIn("model_requested", summary)
         self.assertEqual(summary["agent_version"], "codex-cli 0.0.0 (<home>/private/project/bin/codex)")
-        self.assertEqual(summary["mandala_cli_version"], "mandala v0.3.0")
+        self.assertEqual(summary["mandala_cli_version"], "mandala v0.4.0")
         self.assertEqual([case["case"] for case in summary["cases"]], ["B5", "B4", "R1"])
         self.assertEqual(summary["cases"][1]["error"], {"category": "agent"})
         manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
